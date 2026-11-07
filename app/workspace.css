@@ -467,5 +467,5 @@ a.variant-switcher-link:link,a.variant-switcher-link:visited,a.variant-diff-link
  .insert-rail .toolbox-more-grid { top:202px; right:76px; max-height:calc(100dvh - 218px); }
 }
 
-.document:has(.top-toolbox) { --pages-aligned-width:calc(100% - 122px); }
-@media(max-width:850px) { .document:has(.top-toolbox) { --pages-aligned-width:calc(100% - 88px); } }
+.document:where(:has(.top-toolbox)) { --pages-aligned-width:calc(100% - 122px); }
+@media(max-width:850px) { .document:where(:has(.top-toolbox)) { --pages-aligned-width:calc(100% - 88px); } }
