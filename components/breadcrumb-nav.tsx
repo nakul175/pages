@@ -87,7 +87,8 @@ export default function BreadcrumbNav({ workspaceId, pageId, onOpenPage, onOpenH
     const timer = setInterval(() => { if (document.visibilityState === "hidden" || pageReadDepth() > 0) return; void load(); }, BREADCRUMB_REFRESH_MS);
     const onVisible = () => { if (document.visibilityState === "visible" && pageReadDepth() === 0) void load(); };
     document.addEventListener("visibilitychange", onVisible);
-    return () => { live = false; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+    window.addEventListener("pages:tree-changed", load);
+    return () => { live = false; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("pages:tree-changed", load); };
   }, [workspaceId, pageId, expandedSibling]);
   useEffect(() => { setMenu(null); }, [view?.state, view?.state === "ready" ? view.treeVersion : 0, mobile]);
 
