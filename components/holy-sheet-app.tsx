@@ -7,6 +7,7 @@ import { plainText, schemaVersion } from "../lib/document";
 import SchemaFallback,{documentPreviewText} from './editor/schema-fallback';
 import RichEditor, { Dialog } from "./editor/rich-editor";
 import { requestJson, useDocumentSession } from "./editor/use-document-session";
+import type { DocumentPage } from "../lib/repository";
 import SearchDialog from './search-dialog';
 import PublishingDialog from './publishing-dialog';
 import SharingDialog from './sharing-dialog';
@@ -75,6 +76,17 @@ export default function HolySheetApp({initialPageId,embedded=false}:{initialPage
   const router=useRouter(),[pages,setPages]=useState<(Page & {role?:string})[]>([]),[spaces,setSpaces]=useState<Space[]>([]),[createMode,setCreateMode]=useState<'page'|'subpage'|null>(null),[sharingOpen,setSharingOpen]=useState(false),[searchOpen,setSearchOpen]=useState(false),[navigationError,setNavigationError]=useState(''),[linkNotice,setLinkNotice]=useState('');
   const loadNavigation=useCallback(async()=>{try{const [a,b]=await Promise.all([requestJson<{pages:Page[]}>("/api/pages"),requestJson<{spaces:Space[]}>("/api/spaces")]);setPages(a.pages);setSpaces(b.spaces);setNavigationError("");}catch{setNavigationError("Navigation could not be refreshed.");}},[]);
   const session=useDocumentSession(initialPageId,loadNavigation),{page,status}=session;
+  useEffect(()=>{
+    const refreshRenamedPage=(event:Event)=>{
+      const renamedId=(event as CustomEvent<{pageId:string}>).detail?.pageId;
+      if(renamedId!==initialPageId)return;
+      void requestJson<{page:DocumentPage;actorId:string}>(`/api/v1/pages/${encodeURIComponent(renamedId)}/document`)
+        .then(result=>session.acceptExternal(result.page))
+        .catch(()=>setNavigationError("Could not refresh the renamed page. Reopen it to see its latest name."));
+    };
+    window.addEventListener("pages:renamed",refreshRenamedPage);
+    return()=>window.removeEventListener("pages:renamed",refreshRenamedPage);
+  },[initialPageId,session]);
   const readingAppearance=useReadingAppearance(session.actorId,!!page&&page.id===initialPageId&&page.schemaVersion===schemaVersion&&!session.accessUnverified&&!session.authRequired);
   const personalFocus=usePersonalFocusMode(session.actorId,initialPageId,!!page&&page.id===initialPageId&&page.schemaVersion===schemaVersion&&!session.accessUnverified&&!session.authRequired);
   const title=useRef<HTMLTextAreaElement>(null);

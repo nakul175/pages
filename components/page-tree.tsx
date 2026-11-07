@@ -177,6 +177,7 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, ac
       setNotice("");
       if (node.parentId) await load(node.parentId); else await load(null);
       changed();
+      window.dispatchEvent(new CustomEvent("pages:renamed", { detail: { pageId: node.id } }));
     } catch (error) { showError(error); }
     finally { setBusy(false); }
   }

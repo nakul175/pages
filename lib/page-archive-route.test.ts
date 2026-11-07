@@ -27,6 +27,7 @@ it('archives a page branch, removes it from navigation, and restores it',async()
  expect((await r.list(localActor)).map(page=>page.id)).not.toContain(root.id);
  expect((await r.list(localActor)).map(page=>page.id)).not.toContain(child.id);
  const archived=await GET(new Request(url),context);expect(archived.status).toBe(200);expect((await archived.json()).pages).toEqual(expect.arrayContaining([expect.objectContaining({id:root.id})]));
+ await db.query("UPDATE hs_pages SET archived_at='2026-11-08 00:00:00.123456+00'::timestamptz WHERE id=ANY($1::text[])",[[root.id,child.id]]);
  expect((await mutate(root.id,'restore')).status).toBe(200);
  expect((await r.list(localActor)).map(page=>page.id)).toEqual(expect.arrayContaining([root.id,child.id]));
 });
