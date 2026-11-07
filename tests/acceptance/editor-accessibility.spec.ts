@@ -57,3 +57,19 @@ test('focused toolbars preserve selection through colour palettes and avoid dupl
  const column=await rail.locator('.toolbox-insert-grid button').evaluateAll(elements=>elements.map(e=>Math.round(e.getBoundingClientRect().left)));expect(new Set(column).size).toBe(1);
  await top.getByRole('button',{name:'Clear formatting',exact:true}).click();await expect(page.locator('.rich-prose mark')).toHaveCount(0);
 });
+
+for(const width of [320,800,1440,1920])test(`document aligns with formatting row at ${width}px`,async({page,request})=>{
+ await page.setViewportSize({width,height:900});
+ const created=await request.post(origin+'/api/pages',{headers:{Origin:origin},data:{title:'Disposable aligned document fixture',spaceId:'space-product'}});
+ expect(created.status()).toBe(200);const id=(await created.json()).page.id;await page.goto('/pages/'+id);
+ await expect(page.getByRole('group',{name:'Top editor toolbox',exact:true})).toBeVisible();
+ const bounds=await page.locator('.document').evaluate(document=>{
+  const card=document.querySelector('article')!.getBoundingClientRect(),toolbar=document.querySelector('.top-toolbox')!.getBoundingClientRect(),rail=document.querySelector('.insert-rail')!.getBoundingClientRect(),container=document.getBoundingClientRect();
+  return {cardLeft:card.left,cardRight:card.right,toolbarLeft:toolbar.left,toolbarRight:toolbar.right,railLeft:rail.left,gap:card.left-container.left};
+ });
+ expect(Math.abs(bounds.cardLeft-bounds.toolbarLeft)).toBeLessThanOrEqual(1);
+ expect(Math.abs(bounds.cardRight-bounds.toolbarRight)).toBeLessThanOrEqual(1);
+ expect(bounds.gap).toBeLessThanOrEqual(22);
+ expect(bounds.cardRight).toBeLessThan(bounds.railLeft);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+});
