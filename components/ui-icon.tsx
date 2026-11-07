@@ -1,5 +1,14 @@
 import type { CSSProperties } from 'react';
 const paths = {
+ textColour: <><path d="m5 18 7-14 7 14M8 13h8"/></>,
+ highlighter: <><path d="m14 3 7 7-9 9-7-7zM5 12l-2 6 3 3 6-2M3 21h7"/></>,
+ clearFormatting: <><path d="M4 4h13M10 4l-4 14M14 13l7 7M21 13l-7 7"/></>,
+ heading: <><path d="M4 5v14M14 5v14M4 12h10M18 13l2-2v8"/></>,
+ list: <><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3" cy="6" r=".6"/><circle cx="3" cy="12" r=".6"/><circle cx="3" cy="18" r=".6"/></>,
+ checklist: <><path d="m2 6 2 2 3-4M10 6h11m-19 6 2 2 3-4M10 12h11m-19 6 2 2 3-4M10 18h11"/></>,
+ table: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18M15 9v12M3 15h18"/></>,
+ image: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></>,
+ subpage: <><path d="M14 3H5v18h14V8zM14 3v5h5M8 14h8M12 10v8"/></>,
  document: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></>,
  search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></>,
  plus: <path d="M12 5v14M5 12h14"/>,
