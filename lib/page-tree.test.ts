@@ -55,7 +55,7 @@ it("does not reveal hidden children, counts, or grandchild payloads", async () =
   const parent = await r.create(owner, "P-100", "space-product");
   const hidden = await r.create(owner, "P-200 hidden secret", "space-product", parent.id);
   const shown = await r.create(owner, "P-201 visible", "space-product", parent.id);
-  const grandchild = await r.create(owner, "P-300 grandchild", "space-product", shown.id);
+  await expect(r.create(owner, "P-300 grandchild", "space-product", shown.id)).rejects.toMatchObject({code:"page_depth_limit"});
   await db.query("UPDATE hs_spaces SET home_page_id = $1 WHERE id = 'space-product'", [parent.id]);
   await db.query("INSERT INTO hs_page_template_sources(page_id, template_id, template_revision) VALUES($1,'starter-space-home',1)", [parent.id]);
   await db.query("INSERT INTO hs_space_members(space_id, user_id, role, granted_by) VALUES('space-product',$1,'viewer',$2)", [viewer.id, owner.id]);
@@ -72,14 +72,14 @@ it("does not reveal hidden children, counts, or grandchild payloads", async () =
   const children = await listPageTreeChildren(r, viewer, ws, { spaceId: "space-product", parentId: parent.id });
   expect(children.nodes.map(node => node.id)).toEqual([shown.id]);
   expect(JSON.stringify(children)).not.toContain(hidden.id);
-  expect(JSON.stringify(children)).not.toContain(grandchild.id);
+  expect(children.nodes.find(node => node.id === shown.id)?.hasVisibleChildren).toBe(false);
   const ownerRoots = await listPageTreeChildren(r, owner, ws, { spaceId: "space-product", parentId: null });
   expect(ownerRoots.nodes.find(node => node.id === parent.id)?.hasVisibleChildren).toBe(true);
   const ownerChildren = await listPageTreeChildren(r, owner, ws, { spaceId: "space-product", parentId: parent.id });
   expect(ownerChildren.nodes.map(node => node.id).sort()).toEqual([hidden.id, shown.id].sort());
-  expect(ownerChildren.nodes.find(node => node.id === shown.id)?.hasVisibleChildren).toBe(true);
+  expect(ownerChildren.nodes.find(node => node.id === shown.id)?.hasVisibleChildren).toBe(false);
   const nested = await listPageTreeChildren(r, owner, ws, { spaceId: "space-product", parentId: shown.id });
-  expect(nested.nodes.map(node => node.id)).toEqual([grandchild.id]);
+  expect(nested.nodes).toEqual([]);
   const hiddenParent = await fails(() => listPageTreeChildren(r, viewer, ws, { spaceId: "space-product", parentId: hidden.id }));
   const missingParent = await fails(() => listPageTreeChildren(r, viewer, ws, { spaceId: "space-product", parentId: crypto.randomUUID() }));
   expect(hiddenParent).toEqual(missingParent);
@@ -89,6 +89,14 @@ it("does not reveal hidden children, counts, or grandchild payloads", async () =
   expect(first.nextCursor).toBe(first.nodes[0].id);
   const second = await listPageTreeChildren(r, owner, ws, { spaceId: "space-product", parentId: parent.id, pageSize: 1, cursor: first.nextCursor });
   expect(second.nodes.map(node => node.id)).not.toContain(first.nodes[0].id);
+});
+
+it("rejects moving a page beneath a subpage or moving a branch beneath another page", async () => {
+  const root = await r.create(owner, "Depth root", "space-product");
+  const child = await r.create(owner, "Depth child", "space-product", root.id);
+  const other = await r.create(owner, "Depth other", "space-product");
+  await expect(previewPageTreeMove(r, owner, ws, {pageId:other.id,spaceId:"space-product",parentId:child.id,index:0})).rejects.toMatchObject({code:"page_depth_limit"});
+  await expect(previewPageTreeMove(r, owner, ws, {pageId:root.id,spaceId:"space-product",parentId:other.id,index:0})).rejects.toMatchObject({code:"page_depth_limit"});
 });
 
 it("returns one not-found shape for cross-tenant, missing, and unreadable targets", async () => {

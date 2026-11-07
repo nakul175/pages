@@ -363,6 +363,8 @@ async function buildPreview(r: Repository, tx: Sql, actor: Actor, workspaceId: s
     if (!node) continue;
     after.set(id, { ...node, space_id: targetSpaceId, parent_id: id === rootPageId ? parentId : node.parent_id });
   }
+  const depthOf=(nodes:Map<string,HierarchyNode>,id:string)=>{let current=nodes.get(id),depth=0;const seen=new Set<string>();while(current&&!seen.has(current.id)){seen.add(current.id);depth++;current=current.parent_id?nodes.get(current.parent_id):undefined;}return depth;};
+  for(const id of ids)if(depthOf(after,id)>Math.max(2,depthOf(tree.nodes,id)))throw new DocumentError('Pages can contain subpages, but subpages cannot contain more pages.','page_depth_limit',422);
   const accessChanges: AccessChange[] = [];
   for (const member of tree.members) {
     const beforeCache = new Map<string, PageRole | null>();

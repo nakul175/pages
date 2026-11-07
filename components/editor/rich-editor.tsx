@@ -271,7 +271,7 @@ function RichEditorCore({topToolboxHost,document,editable,onChange,onCollaborati
       ['heading', 'H1', 'Heading'], ['bulletList', '☷', 'List'], ['taskList', '☑', 'Checklist'],
       ['table', '▦', 'Table'], ['image', '▧', 'Image'], ['subpage', '＋', 'Subpage'],
     ];
-    return blocks.map(([kind, icon, label]) => (
+    return blocks.filter(([kind])=>kind!=='subpage'||!!onCreateSubpage).map(([kind, icon, label]) => (
       <button key={kind} type="button" aria-label={`${icon} ${label}`} title={label} disabled={!editable || (kind === 'image' && !mediaEnabled)}
         onMouseDown={event => event.preventDefault()}
         onClick={kind === 'subpage' ? onCreateSubpage : () => insertKind(kind)}>

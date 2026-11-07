@@ -163,7 +163,7 @@ async function loadView(r: Repository, tx: Sql, actor: Actor, found: Scope, repl
     JOIN hs_users u ON u.id = p.owner_id
     LEFT JOIN hs_revisions rev ON rev.page_id = p.id AND rev.version = p.version
     LEFT JOIN hs_users editor ON editor.id = rev.actor_id
-    WHERE p.space_id = $1 AND p.workspace_id = $2 AND p.deleted_at IS NULL
+    WHERE p.space_id = $1 AND p.workspace_id = $2 AND p.deleted_at IS NULL AND p.archived_at IS NULL
     ORDER BY p.updated_at DESC, p.id
     LIMIT 80`, [found.id, found.workspace_id]);
   const readablePages: { page: DocumentPage; ownerId: string; ownerName: string; editorName: string | null }[] = [];
@@ -211,7 +211,7 @@ async function loadView(r: Repository, tx: Sql, actor: Actor, found: Scope, repl
   const viewRows = await tx.query<{ page_id: string; node: unknown }>(`SELECT b.page_id, b.node
     FROM hs_blocks b
     JOIN hs_pages p ON p.id = b.page_id
-    WHERE p.space_id = $1 AND p.workspace_id = $2 AND p.deleted_at IS NULL AND b.type = 'recordView'
+    WHERE p.space_id = $1 AND p.workspace_id = $2 AND p.deleted_at IS NULL AND p.archived_at IS NULL AND b.type = 'recordView'
     ORDER BY p.updated_at DESC, b.position
     LIMIT 40`, [found.id, found.workspace_id]);
   const recordViews: SpaceHomeRecordView[] = [];

@@ -93,7 +93,7 @@ it("shows a skeleton while a branch loads and then only the visible child", asyn
   expect(host.querySelector("[aria-label='Expand Visible child']")).toBeNull();
 });
 
-it("supports the keyboard tree, inline create cancel, and the move dialog", async () => {
+it("supports the keyboard tree, named creation, and the move dialog", async () => {
   const opened = vi.fn();
   let drafting = false;
   mocks.request.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -115,16 +115,14 @@ it("supports the keyboard tree, inline create cancel, and the move dialog", asyn
   expect(opened).toHaveBeenCalledWith("b");
   await press(item("b"), "ArrowUp");
   await press(item("a"), "F2");
-  expect(host.querySelector("input[aria-label='Rename Alpha']")).toBeTruthy();
-  await act(async () => host.querySelector<HTMLInputElement>("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(host.querySelector("[role=dialog][aria-label='Rename Alpha'] input")).toBeTruthy();
+  await act(async () => [...host.querySelectorAll("button")].find(button => button.textContent === "Cancel")!.click());
   expect(host.querySelector("input")).toBeNull();
   await press(tree, "n");
   await act(async () => { await Promise.resolve(); });
-  const created = host.querySelector<HTMLInputElement>("[aria-label='New page title']");
-  expect(created).toBeTruthy();
-  await act(async () => created!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-  await act(async () => { await Promise.resolve(); });
-  expect(mocks.request.mock.calls.some(call => String(call[1]?.body ?? "").includes("\"kind\":\"cancel\""))).toBe(true);
+  expect(host.querySelector("[role=dialog]")?.getAttribute("aria-label")).toBe("New subpage in Alpha");
+  await act(async () => [...host.querySelectorAll("button")].find(button => button.textContent === "Cancel")!.click());
+  expect(mocks.request.mock.calls.some(call => String(call[0]).includes("/api/pages"))).toBe(false);
   await press(tree, "m", { ctrlKey: true, shiftKey: true });
   expect(host.querySelector("[role=dialog]")?.getAttribute("aria-label")).toBe("Move page");
   expect(host.textContent).toContain("Review move and access");
