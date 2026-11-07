@@ -34,6 +34,7 @@ type Row = {
   position: number;
   updated_at: string | Date;
   deleted_at?: string | Date | null;
+  archived_at?: string | Date | null;
   acl_version?: number;
 };
 type Grant = { page_id: string; subject: string; role: PageRole };
@@ -144,7 +145,7 @@ async function requireMember(tx: Sql, workspaceId: string, actor: Actor, lock = 
 async function readContext(tx: Sql, actor: Actor, workspaceId: string, lock = false): Promise<Context> {
   const member = await requireMember(tx, workspaceId, actor, lock);
   const pages = await tx.query<Row>(
-    `SELECT id, workspace_id, space_id, parent_id, owner_id, visibility, title, version, acl_version, position, updated_at, deleted_at
+    `SELECT id, workspace_id, space_id, parent_id, owner_id, visibility, title, version, acl_version, position, updated_at, deleted_at, archived_at
      FROM hs_pages WHERE workspace_id = $1 ORDER BY id`,
     [workspaceId],
   );
@@ -189,7 +190,7 @@ function ordered(rows: Row[]) {
 }
 
 function nodeOf(ctx: Context, actorId: string, page: Row, spaceId: string): PageTreeNode {
-  const hasVisibleChildren = [...ctx.pages.values()].some(child => child.parent_id === page.id && child.space_id === spaceId && !child.deleted_at && pageReadable(ctx, actorId, child));
+  const hasVisibleChildren = [...ctx.pages.values()].some(child => child.parent_id === page.id && child.space_id === spaceId && !child.deleted_at && !child.archived_at && pageReadable(ctx, actorId, child));
   return {
     id: page.id,
     title: page.title,
@@ -218,14 +219,14 @@ export async function listPageTreeChildren(
     if (query.parentId) {
       if (query.parentId.length > 200) throw unavailable();
       const parent = ctx.pages.get(query.parentId);
-      if (!parent || parent.deleted_at || parent.workspace_id !== workspaceId || parent.space_id !== query.spaceId || !readable(parent)) throw unavailable();
-      rows = [...ctx.pages.values()].filter(page => page.parent_id === query.parentId && page.space_id === query.spaceId && !page.deleted_at && readable(page));
+      if (!parent || parent.deleted_at || parent.archived_at || parent.workspace_id !== workspaceId || parent.space_id !== query.spaceId || !readable(parent)) throw unavailable();
+      rows = [...ctx.pages.values()].filter(page => page.parent_id === query.parentId && page.space_id === query.spaceId && !page.deleted_at && !page.archived_at && readable(page));
     } else {
       rows = [...ctx.pages.values()].filter(page => {
-        if (page.space_id !== query.spaceId || page.deleted_at || !readable(page)) return false;
+        if (page.space_id !== query.spaceId || page.deleted_at || page.archived_at || !readable(page)) return false;
         if (!page.parent_id) return true;
         const parent = ctx.pages.get(page.parent_id);
-        return !parent || parent.space_id !== page.space_id || parent.deleted_at || !readable(parent);
+        return !parent || parent.space_id !== page.space_id || parent.deleted_at || parent.archived_at || !readable(parent);
       });
     }
     const sorted = ordered(rows);
@@ -250,8 +251,8 @@ export async function listPageTreeChildren(
 }
 
 async function assertDestination(r: Repository, tx: Sql, actor: Actor, workspaceId: string, spaceId: string, parentId: string | null) {
-  const space = await tx.query<{ access_model_version: number; role: string; space_role: string | null }>(
-    `SELECT w.access_model_version, m.role, sm.role AS space_role
+  const space = await tx.query<{ access_model_version: number; role: string; space_role: string | null; archived_at:string|null }>(
+    `SELECT w.access_model_version, m.role, sm.role AS space_role,s.archived_at
      FROM hs_spaces s
      JOIN hs_workspaces w ON w.id = s.workspace_id
      JOIN hs_members m ON m.workspace_id = w.id AND m.user_id = $3 AND m.active = true
@@ -260,6 +261,7 @@ async function assertDestination(r: Repository, tx: Sql, actor: Actor, workspace
     [spaceId, workspaceId, actor.id],
   );
   if (!space.rows.length) throw unavailable();
+  if (space.rows[0].archived_at) throw createDenied();
   if (parentId) {
     try {
       const parent = await r.access(tx, parentId, actor, true, false);
@@ -314,13 +316,15 @@ async function reviewMove(r: Repository, tx: Sql, actor: Actor, workspaceId: str
   const nodes = new Map(pages.map(page => [page.id, page as HierarchyNode]));
   const ids = pageSubtree(pages as HierarchyNode[], intent.pageId);
   if (intent.parentId && ids.has(intent.parentId)) throw new DocumentError("A page cannot move into itself or its descendants", "move_cycle", 422);
-  const destination = ordered(pages.filter(page => !page.deleted_at && page.space_id === intent.spaceId && page.parent_id === intent.parentId));
+  const destination = ordered(pages.filter(page => !page.deleted_at && !page.archived_at && page.space_id === intent.spaceId && page.parent_id === intent.parentId));
   const visible = destination.filter(page => page.id !== intent.pageId && pageReadable(ctx, actor.id, page));
   const placed = mergeSiblingOrder(destination.map(page => page.id), visible.map(page => page.id), intent.pageId, intent.index);
   if (!placed) throw new DocumentError("Choose a valid sibling position", "invalid_position", 422);
   const byPage = new Map<string, HierarchyGrant[]>();
   for (const grant of grantRows.rows) byPage.set(grant.page_id, [...(byPage.get(grant.page_id) ?? []), grant]);
   const after = new Map(pages.map(page => [page.id, { ...page, ...(ids.has(page.id) ? { space_id: intent.spaceId } : {}), ...(page.id === intent.pageId ? { parent_id: intent.parentId } : {}) } as HierarchyNode]));
+  const depthOf=(map:Map<string,HierarchyNode>,id:string)=>{let current=map.get(id),depth=0;const visited=new Set<string>();while(current&&!visited.has(current.id)){visited.add(current.id);depth++;current=current.parent_id?map.get(current.parent_id):undefined;}return depth;};
+  for (const id of ids) if(depthOf(after,id)>Math.max(2,depthOf(nodes,id))) throw new DocumentError("Pages can contain subpages, but subpages cannot contain more pages.", "page_depth_limit", 422);
   const changes: PageTreeMovePreview["changes"] = [];
   for (const member of members.rows) {
     const beforeCache = new Map<string, PageRole | null>();

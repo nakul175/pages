@@ -20,6 +20,7 @@ import {
 } from "../lib/page-tree-model";
 import { canEdit } from "../lib/types";
 import UiIcon from "./ui-icon";
+import {DeletePageDialog} from "./trash-dialog";
 
 type Place = { spaceId: string; parentId: string | null; index: number };
 type Intent = Place & { pageId: string };
@@ -31,10 +32,11 @@ type Flat = { kind: "node"; node: PageTreeNode; depth: number } | { kind: "skele
 const post = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 const requestTree = <T,>(url: string, init?: RequestInit) => enqueuePageRead(() => requestJson<T>(url, init));
 
-export default function PageTree({ workspaceId, spaceId, spaceName, activeId, onOpen }: { workspaceId: string; spaceId: string; spaceName: string; activeId?: string; onOpen: (id: string) => void }) {
+export default function PageTree({ workspaceId, spaceId, spaceName, activeId, activeParentId, onOpen }: { workspaceId: string; spaceId: string; spaceName: string; activeId?: string; activeParentId?: string|null; onOpen: (id: string) => void }) {
   const hintId = useId();
   const endpoint = `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/page-tree`;
   const scroller = useRef<HTMLDivElement>(null);
+  const scrolledToActive = useRef<string | null>(null);
   const mounted = useRef(true);
   const dragging = useRef<string | null>(null);
   const expandedRef = useRef<Set<string>>(new Set());
@@ -48,6 +50,16 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
   const [drop, setDrop] = useState<{ id: string; place: PageTreeDrop } | null>(null);
   const [notice, setNotice] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [createParent, setCreateParent] = useState<string | null | undefined>(undefined);
+  const [createTitle, setCreateTitle] = useState("");
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menuAt, setMenuAt] = useState({ x: 0, y: 0 });
+  const menuHost = useRef<HTMLDivElement>(null);
+  const [renameFor, setRenameFor] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [trashFor, setTrashFor] = useState<string | null>(null);
+  const [archiveFor, setArchiveFor] = useState<string | null>(null);
+  const [archiveCount, setArchiveCount] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [moveFor, setMoveFor] = useState<string | null>(null);
@@ -70,6 +82,7 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
     }
     return slice;
   }, [endpoint, spaceId]);
+  const changed=()=>window.dispatchEvent(new Event('pages:tree-changed'));
 
   const reloadAll = useCallback(async () => {
     await load(null);
@@ -91,6 +104,7 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
   }, [roots.length, ready]);
 
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(null), PAGE_TREE_UNDO_MS); return () => clearTimeout(timer); }, [toast]);
+  useEffect(() => {if(menuFor)menuHost.current?.querySelector('button')?.focus();},[menuFor]);
 
   const find = useCallback((id: string) => roots.find(node => node.id === id) ?? Object.values(children).flat().find(node => node.id === id), [roots, children]);
 
@@ -115,18 +129,31 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
   function collapse(id: string) {
     setExpanded(current => { const next = new Set(current); next.delete(id); return next; });
   }
+  useEffect(()=>{if(!activeParentId||expanded.has(activeParentId))return;const parent=roots.find(node=>node.id===activeParentId);if(parent)void expand(parent);},[activeParentId,roots,expanded]);
 
-  async function createChild(parentId: string | null) {
+  function createChild(parentId: string | null) {
+    if (parentId && find(parentId)?.parentId) { setNotice("A subpage cannot contain another subpage."); return; }
+    setCreateTitle(""); setCreateParent(parentId); setMenuFor(null);
+  }
+
+  async function reviewArchive(id:string){setMenuFor(null);setArchiveFor(id);setArchiveCount(null);try{const result=await requestTree<{count:number}>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/page-archive`,post({pageId:id,action:'preview'}));setArchiveCount(result.count);}catch(error){setArchiveFor(null);showError(error);}}
+  async function archivePage(){if(!archiveFor)return;setBusy(true);try{await requestTree(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/page-archive`,post({pageId:archiveFor,action:'archive'}));const archived=archiveFor;const activeParent=activeId?find(activeId)?.parentId:null;setArchiveFor(null);await reloadAll();changed();if(activeId===archived||activeParent===archived)location.assign('/');}catch(error){showError(error);}finally{setBusy(false);}}
+
+  async function submitCreate() {
+    if (createParent === undefined || !createTitle.trim()) return;
+    const parentId = createParent;
     const operationId = crypto.randomUUID();
     setBusy(true);
     try {
-      const created = await requestTree<{ pageId: string }>(endpoint, post({ kind: "create", spaceId, parentId, operationId }));
+      const created = await requestTree<{ page: { id: string } }>("/api/pages", post({ title:createTitle.trim(), spaceId, parentPageId:parentId, operationId }));
       if (parentId) {
         setExpanded(current => new Set(current).add(parentId));
         await load(parentId);
       } else await load(null);
-      setDraft({ id: created.pageId, kind: "create", value: "", operationId });
-      setFocusId(created.pageId);
+      setFocusId(created.page.id);
+      setCreateParent(undefined);
+      changed();
+      onOpen(created.page.id);
       setNotice("");
     } catch (error) { showError(error); }
     finally { setBusy(false); }
@@ -146,8 +173,10 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
     try {
       await requestTree(endpoint, post({ kind: "rename", pageId: node.id, title, baseVersion: node.version, operationId: crypto.randomUUID() }));
       setDraft(null);
+      setRenameFor(null);
       setNotice("");
       if (node.parentId) await load(node.parentId); else await load(null);
+      changed();
     } catch (error) { showError(error); }
     finally { setBusy(false); }
   }
@@ -160,6 +189,7 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
     setNotice("");
     if (next.inverse) setToast({ pageId: next.intent.pageId, atIst: result.atIst, inverse: next.inverse });
     await reloadAll();
+    changed();
   }
 
   async function commitMove(intent: Intent, inverse: Place | null) {
@@ -209,6 +239,15 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
   const nodeRows = rows.flatMap(row => row.kind === "node" ? [row] : []);
 
   useEffect(() => {
+    if(!activeId || scrolledToActive.current===activeId) return;
+    const index=rows.findIndex(row=>row.kind==='node'&&row.node.id===activeId);
+    if(index<0||!scroller.current)return;
+    const top=index*PAGE_TREE_ROW_PX, bottom=top+PAGE_TREE_ROW_PX, view=scroller.current;
+    if(top<view.scrollTop||bottom>view.scrollTop+view.clientHeight){view.scrollTop=Math.max(0,top-PAGE_TREE_ROW_PX);setScrollTop(view.scrollTop);}
+    scrolledToActive.current=activeId;
+  },[activeId,rows]);
+
+  useEffect(() => {
     if (!focusId || draft?.id === focusId) return;
     document.getElementById(`page-tree-item-${focusId}`)?.focus();
   }, [focusId, draft, scrollTop, roots, children, expanded]);
@@ -250,7 +289,7 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
       return;
     }
     if (event.key === "Enter") { event.preventDefault(); onOpen(current.node.id); return; }
-    if (event.key === "F2" && canEdit(current.node.role)) { event.preventDefault(); setDraft({ id: current.node.id, kind: "rename", value: current.node.title }); return; }
+    if (event.key === "F2" && canEdit(current.node.role)) { event.preventDefault(); setRenameFor(current.node.id); setRenameTitle(current.node.title); return; }
     if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "m") { event.preventDefault(); setMoveFor(current.node.id); setPending(null); return; }
     if (event.key.toLowerCase() === "n" && !event.metaKey && !event.ctrlKey && !event.altKey && canEdit(current.node.role)) { event.preventDefault(); void createChild(current.node.id); }
   }
@@ -259,7 +298,7 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
   return <div className="page-tree-host">
     {notice && <p className="page-tree-notice" role="alert">{notice}</p>}
     <div className={`page-tree-space${drop?.id === "space" ? " drop-inside" : ""}`} onDragOver={event => { if (!dragging.current) return; event.preventDefault(); setDrop({ id: "space", place: "inside" }); }} onDrop={event => { event.preventDefault(); const dragged = dragging.current ? find(dragging.current) : undefined; dragging.current = null; setDrop(null); if (!dragged) return; const index = siblingDestination(roots.map(node => node.id), dragged.id, "", "after"); void commitMove({ pageId: dragged.id, spaceId, parentId: null, index }, { spaceId: dragged.spaceId, parentId: dragged.parentId, index: siblingsOf(dragged).findIndex(node => node.id === dragged.id) }); }}>
-      {canCreate && <button type="button" className="page-tree-add" aria-label={`New page in ${spaceName}`} disabled={busy} onClick={() => void createChild(null)}><UiIcon name="plus"/>New page</button>}
+      {canCreate && <button type="button" className="page-tree-add" aria-label={`New page in ${spaceName}`} disabled={busy} onClick={() => createChild(null)}><UiIcon name="plus"/>New page</button>}
     </div>
     {!ready && <div className="page-tree-skeleton" role="status" aria-busy="true">Loading pages</div>}
     {ready && !rows.length && <p className="space-empty">No pages yet</p>}
@@ -270,15 +309,20 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
           if (row.kind === "skeleton") return <div key={`loading-${row.key}`} className="page-tree-skeleton" role="treeitem" aria-busy="true" aria-level={row.depth + 1} style={{ position: "absolute", top, height: PAGE_TREE_ROW_PX, left: 0, right: 0 }}>Loading pages</div>;
           const node = row.node;
           const open = expanded.has(node.id);
-          return <div key={node.id} id={`page-tree-item-${node.id}`} role="treeitem" aria-level={row.depth + 1} aria-selected={focusId === node.id} aria-current={node.id === activeId ? "page" : undefined} aria-expanded={node.hasVisibleChildren ? open : undefined} tabIndex={focusId === node.id || (!focusId && offset === 0 && range.start === 0) ? 0 : -1} className={`page-tree-row${drop?.id === node.id ? ` drop-${drop.place}` : ""}`} style={{ position: "absolute", top, height: PAGE_TREE_ROW_PX, left: 0, right: 0, paddingLeft: 8 + row.depth * 14 }} draggable={canEdit(node.role) && draft?.id !== node.id} onDragStart={event => { if (!canEdit(node.role)) { event.preventDefault(); return; } dragging.current = node.id; event.dataTransfer?.setData("application/x-holy-page", node.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; }} onDragOver={event => { if (!dragging.current || dragging.current === node.id) return; event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setDrop({ id: node.id, place: dropPlacement(event.clientY - rect.top, rect.height || PAGE_TREE_ROW_PX) }); }} onDrop={event => { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); void dropOn(node, dropPlacement(event.clientY - rect.top, rect.height || PAGE_TREE_ROW_PX)); }} onDragEnd={() => { dragging.current = null; setDrop(null); }}>
+          return <div key={node.id} id={`page-tree-item-${node.id}`} role="treeitem" aria-level={row.depth + 1} aria-selected={focusId === node.id} aria-current={node.id === activeId ? "page" : undefined} aria-expanded={node.hasVisibleChildren ? open : undefined} tabIndex={focusId === node.id || (!focusId && offset === 0 && range.start === 0) ? 0 : -1} className={`page-tree-row${drop?.id === node.id ? ` drop-${drop.place}` : ""}`} style={{ position: "absolute", top, height: PAGE_TREE_ROW_PX, left: 0, right: 0, paddingLeft: 8 + row.depth * 14 }} onContextMenu={event => {event.preventDefault();setMenuFor(node.id);setMenuAt({x:event.clientX,y:event.clientY});}} draggable={canEdit(node.role) && draft?.id !== node.id} onDragStart={event => { if (!canEdit(node.role)) { event.preventDefault(); return; } dragging.current = node.id; event.dataTransfer?.setData("application/x-holy-page", node.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; }} onDragOver={event => { if (!dragging.current || dragging.current === node.id) return; event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setDrop({ id: node.id, place: dropPlacement(event.clientY - rect.top, rect.height || PAGE_TREE_ROW_PX) }); }} onDrop={event => { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); void dropOn(node, dropPlacement(event.clientY - rect.top, rect.height || PAGE_TREE_ROW_PX)); }} onDragEnd={() => { dragging.current = null; setDrop(null); }}>
             {node.hasVisibleChildren ? <button type="button" className="page-tree-expand" aria-label={`${open ? "Collapse" : "Expand"} ${node.title}`} tabIndex={-1} onClick={() => { setFocusId(node.id); if (open) collapse(node.id); else void expand(node); }}>{open ? "▾" : "▸"}</button> : <span className="page-tree-expand" aria-hidden="true"/>}
             {draft?.id === node.id ? <input id={`page-tree-title-${node.id}`} className="page-tree-rename" aria-label={draft.kind === "create" ? "New page title" : `Rename ${node.title}`} value={draft.value} autoFocus placeholder="Untitled" onChange={event => setDraft({ ...draft, value: event.target.value })} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); void cancelDraft(draft); } if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); const title = draft.value.trim(); if (!title) void cancelDraft(draft); else void commitRename(node, title); } }}/> : <button type="button" className={`page-tree-open${node.id === activeId ? " active" : ""}`} tabIndex={-1} onClick={() => { setFocusId(node.id); onOpen(node.id); }}><UiIcon name="document"/><span className="page-tree-title">{node.title}</span></button>}
-            {canEdit(node.role) && <button type="button" className="page-tree-add" aria-label={`New subpage of ${node.title}`} tabIndex={-1} disabled={busy} onClick={() => void createChild(node.id)}>+</button>}
+            {canEdit(node.role) && <button type="button" className="page-tree-menu-trigger" aria-label={`Actions for ${node.title}`} tabIndex={-1} onClick={event => {setMenuAt({x:event.clientX,y:event.clientY});setMenuFor(menuFor === node.id ? null : node.id);}}>···</button>}
           </div>;
         })}
       </div>
     </div>}
-    <p id={hintId} className="page-tree-live">Arrow keys move in the tree. Enter opens. F2 renames. N or plus creates a subpage. Alt plus Shift plus arrows reorder. Command or Control plus Shift plus M opens Move page. Escape cancels an empty new page.</p>
+    {createParent !== undefined && <Dialog title={createParent ? `New subpage in ${find(createParent)?.title ?? "page"}` : `New page in ${spaceName}`} onClose={() => setCreateParent(undefined)}><form className="page-tree-create" onSubmit={event => {event.preventDefault();void submitCreate();}}><label>Page name<input autoFocus maxLength={240} value={createTitle} onChange={event => setCreateTitle(event.target.value)} required/></label><div className="actions"><button type="button" onClick={() => setCreateParent(undefined)}>Cancel</button><button type="submit" className="primary" disabled={busy || !createTitle.trim()}>Create {createParent ? "subpage" : "page"}</button></div></form></Dialog>}
+    {menuFor && find(menuFor) && <div ref={menuHost} className="page-tree-context" role="menu" aria-label={`Actions for ${find(menuFor)!.title}`} style={{left:Math.max(8,Math.min(menuAt.x,window.innerWidth-210)),top:Math.max(8,Math.min(menuAt.y,window.innerHeight-270))}} onKeyDown={event => {if(event.key==='Escape')setMenuFor(null);}}><button role="menuitem" onClick={() => {onOpen(menuFor);setMenuFor(null);}}>Open</button>{!find(menuFor)!.parentId && canEdit(find(menuFor)!.role) && <button role="menuitem" onClick={() => createChild(menuFor)}>Add subpage</button>}{canEdit(find(menuFor)!.role)&&<><button role="menuitem" onClick={() => {const node=find(menuFor)!;setRenameFor(node.id);setRenameTitle(node.title);setMenuFor(null);}}>Rename</button><button role="menuitem" onClick={() => {setMoveFor(menuFor);setMenuFor(null);}}>Move</button><button role="menuitem" onClick={() => void reviewArchive(menuFor)}>Archive</button><button role="menuitem" onClick={() => {setTrashFor(menuFor);setMenuFor(null);}}>Move to Trash</button></>}</div>}
+    {archiveFor&&<Dialog title={`Archive ${find(archiveFor)?.title ?? 'page'}`} onClose={()=>setArchiveFor(null)}><p>{archiveCount===null?'Checking pages…':`${archiveCount} page${archiveCount===1?'':'s'} will be hidden from active navigation. You can restore them from Spaces → Archived pages.`}</p><div className="actions"><button type="button" onClick={()=>setArchiveFor(null)}>Cancel</button><button type="button" disabled={busy||archiveCount===null} onClick={()=>void archivePage()}>Archive</button></div></Dialog>}
+    {trashFor&&<DeletePageDialog page={{id:trashFor,workspaceId}} onClose={()=>setTrashFor(null)} onDeleted={()=>{setTrashFor(null);void reloadAll();changed();if(activeId===trashFor)location.assign('/');}}/>}
+    {renameFor && find(renameFor) && <Dialog title={`Rename ${find(renameFor)!.title}`} onClose={() => setRenameFor(null)}><form className="page-tree-create" onSubmit={event => {event.preventDefault();if(renameTitle.trim())void commitRename(find(renameFor)!,renameTitle.trim());}}><label>Page name<input autoFocus maxLength={240} value={renameTitle} onChange={event => setRenameTitle(event.target.value)} required/></label><div className="actions"><button type="button" onClick={() => setRenameFor(null)}>Cancel</button><button type="submit" disabled={busy||!renameTitle.trim()}>Save name</button></div></form></Dialog>}
+    <p id={hintId} className="page-tree-live">Arrow keys move in the tree. Enter opens. F2 renames. N creates a subpage. Alt plus Shift plus arrows reorder. Command or Control plus Shift plus M opens Move page. Right click or use Actions for more options.</p>
     <div className="page-tree-live" aria-live="polite">{drop ? `Drop ${drop.place === "inside" && drop.id === "space" ? `inside ${spaceName}` : `${drop.place} ${find(drop.id)?.title ?? ""}`}` : ""}</div>
     {toast && <div className="page-tree-toast" role="status"><span>Page moved. {toast.atIst}. Undo is available for 10 seconds.</span><button type="button" onClick={() => { const current = find(toast.pageId); const redo = current ? { spaceId: current.spaceId, parentId: current.parentId, index: siblingsOf(current).findIndex(node => node.id === current.id) } : null; const inverse = toast.inverse; setToast(null); void commitMove({ pageId: toast.pageId, ...inverse }, redo && redo.index >= 0 ? redo : null); }}>Undo</button></div>}
     {pending && <Dialog title="Move page" onClose={() => { if (!busy) { setPending(null); setChecked(false); } }}><div className="page-tree-move">
@@ -290,23 +334,24 @@ export default function PageTree({ workspaceId, spaceId, spaceName, activeId, on
       {pending.preview.expandsAccess && <label className="check"><input type="checkbox" checked={checked} onChange={event => setChecked(event.target.checked)}/>I reviewed and approve the additional inherited access.</label>}
       <div className="actions"><button type="button" disabled={busy} onClick={() => setPending(null)}>Cancel</button><button type="button" className="primary" disabled={busy || (pending.preview.expandsAccess && !checked)} onClick={() => { setBusy(true); void applyPending(pending, checked).catch(showError).finally(() => setBusy(false)); }}>Confirm move</button></div>
     </div></Dialog>}
-    {moving && !pending && <MoveDialog node={moving} spaceName={spaceName} roots={roots} children={children} busy={busy} onClose={() => setMoveFor(null)} onReview={(parentId, index) => void commitMove({ pageId: moving.id, spaceId: moving.spaceId, parentId, index }, { spaceId: moving.spaceId, parentId: moving.parentId, index: siblingsOf(moving).findIndex(item => item.id === moving.id) })}/>}
+    {moving && !pending && <MoveDialog node={moving} workspaceId={workspaceId} spaceName={spaceName} roots={roots} children={children} busy={busy} onClose={() => setMoveFor(null)} onReview={(parentId, index) => void commitMove({ pageId: moving.id, spaceId: moving.spaceId, parentId, index }, { spaceId: moving.spaceId, parentId: moving.parentId, index: siblingsOf(moving).findIndex(item => item.id === moving.id) })}/>}
   </div>;
 }
 
-function MoveDialog({ node, spaceName, roots, children, busy, onClose, onReview }: { node: PageTreeNode; spaceName: string; roots: PageTreeNode[]; children: Record<string, PageTreeNode[]>; busy: boolean; onClose: () => void; onReview: (parentId: string | null, index: number) => void }) {
+function MoveDialog({ node, workspaceId, spaceName, roots, children, busy, onClose, onReview }: { node: PageTreeNode; workspaceId:string; spaceName: string; roots: PageTreeNode[]; children: Record<string, PageTreeNode[]>; busy: boolean; onClose: () => void; onReview: (parentId: string | null, index: number) => void }) {
   const blocked = new Set<string>([node.id]);
   const walk = (id: string) => { for (const child of children[id] ?? []) { blocked.add(child.id); walk(child.id); } };
   walk(node.id);
-  const destinations = [...roots, ...Object.values(children).flat()].filter(item => !blocked.has(item.id));
+  const destinations = roots.filter(item => !blocked.has(item.id));
   const [parentId, setParentId] = useState(node.parentId ?? "");
   const siblings = (parentId ? children[parentId] ?? [] : roots).filter(item => item.id !== node.id);
   const [index, setIndex] = useState(0);
   const chosen = Math.min(index, siblings.length);
   return <Dialog title="Move page" onClose={onClose}><form className="page-tree-move" onSubmit={event => { event.preventDefault(); onReview(parentId || null, chosen); }}>
-    <p>Choose a destination you can organise. A space where you cannot create pages is refused with an explanation. {PAGE_TREE_CREATE_DENIED}</p>
+    <p>Choose a destination in this space. A destination where you cannot create pages is refused with an explanation. {PAGE_TREE_CREATE_DENIED}</p>
     <label>Parent page<select value={parentId} disabled={busy} onChange={event => { setParentId(event.target.value); setIndex(0); }}><option value="">Top level in {spaceName}</option>{destinations.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
     <label>Position<select value={chosen} disabled={busy} onChange={event => setIndex(Number(event.target.value))}><option value={0}>First</option>{siblings.map((item, itemIndex) => <option key={item.id} value={itemIndex + 1}>After {item.title}</option>)}</select></label>
     <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy}>Review move and access</button></div>
+    <a href={`/workspaces/${encodeURIComponent(workspaceId)}/spaces?movePage=${encodeURIComponent(node.id)}`}>Move to another space</a>
   </form></Dialog>;
 }

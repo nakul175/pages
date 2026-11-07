@@ -14,6 +14,9 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [newSpaceName, setNewSpaceName] = useState("");
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [archivedPages, setArchivedPages] = useState<{id:string;title:string;space_name:string}[] | null>(null);
   const [rootPageId, setRootPageId] = useState("");
   const [targetSpaceId, setTargetSpaceId] = useState("");
   const [parentId, setParentId] = useState("");
@@ -37,6 +40,7 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
   }, [endpoint, includeArchived]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { const query=new URLSearchParams(window.location.search);if(query.get('create')==='1')setCreatingSpace(true);const movePage=query.get('movePage');if(movePage){setRootPageId(movePage);setMoveOpen(true);} }, []);
 
   useEffect(() => { if (moveOpen) moveHeading.current?.focus(); }, [moveOpen]);
 
@@ -54,6 +58,21 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
       setBusy(false);
     }
   }
+
+  async function createSpace(event: FormEvent) {
+    event.preventDefault();
+    const name = newSpaceName.trim();
+    if (!name) return;
+    setBusy(true); setError("");
+    try {
+      await requestJson('/api/v1/space-creations', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,workspaceId,operationId:crypto.randomUUID()})});
+      setCreatingSpace(false); setNewSpaceName(""); setNotice(`${name} created.`);
+      await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : SPACE_UNAVAILABLE); }
+    finally { setBusy(false); }
+  }
+  async function loadArchived(){try{const data=await requestJson<{pages:{id:string;title:string;space_name:string}[]}>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/page-archive`);setArchivedPages(data.pages);}catch(reason){setError(reason instanceof Error?reason.message:SPACE_UNAVAILABLE);}}
+  async function restorePage(id:string){setBusy(true);setError("");try{await requestJson(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/page-archive`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pageId:id,action:'restore'})});setNotice('Page restored.');await loadArchived();}catch(reason){setError(reason instanceof Error?reason.message:SPACE_UNAVAILABLE);}finally{setBusy(false);}}
 
   async function reviewMove(event: FormEvent) {
     event.preventDefault();
@@ -138,7 +157,10 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
   return <WorkspaceSection workspaceId={workspaceId} section="Spaces" spaces={view?.spaces.filter(space => space.action === "open" && !space.archived)}><main className="space-directory">
     <a className="skip-link" href="#space-directory">Skip to spaces</a>
     <p><a href="/">Pages by Aplyd</a> / <span>Spaces</span></p>
-    <h1 id="space-directory">Spaces</h1>
+    <div className="space-directory-heading"><h1 id="space-directory">Spaces</h1><button type="button" onClick={() => setCreatingSpace(true)}>+ New space</button></div>
+    {creatingSpace && <form className="space-create-form" onSubmit={event => void createSpace(event)}><label>Space name<input autoFocus maxLength={80} value={newSpaceName} onChange={event => setNewSpaceName(event.target.value)} required/></label><div><button type="button" onClick={() => {setCreatingSpace(false);setNewSpaceName("");}}>Cancel</button><button type="submit" disabled={busy || !newSpaceName.trim()}>Create space</button></div></form>}
+    <button type="button" onClick={()=>void loadArchived()}>Archived pages</button>
+    {archivedPages&&<section aria-label="Archived pages"><h2>Archived pages</h2>{archivedPages.length?<ul>{archivedPages.map(item=><li key={item.id}>{item.title} · {item.space_name} <button type="button" disabled={busy} onClick={()=>void restorePage(item.id)}>Restore</button></li>)}</ul>:<p>No archived pages.</p>}</section>}
 
 
     {error && <p role="alert">{error}</p>}

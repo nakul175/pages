@@ -139,9 +139,10 @@ it("archives a space read-only, drops it from search, and restores it", async ()
 
 async function tree(title: string) {
   const sourceParent = await r.create(owner, `${title} source`, sourceSpace);
-  const root = await r.create(owner, title, sourceSpace, sourceParent.id);
+  const root = await r.create(owner, title, sourceSpace);
   const child = await r.create(owner, `${title} child`, sourceSpace, root.id);
   const trashed = await r.create(owner, `${title} trash`, sourceSpace, root.id);
+  await db.query('UPDATE hs_pages SET parent_id=$2 WHERE id=$1',[root.id,sourceParent.id]);
   const outside = await r.create(owner, `${title} outside`, sourceSpace);
   const destination = await r.create(owner, `${title} destination`, openSpace);
   await db.query("INSERT INTO hs_grants(page_id, subject, role) VALUES($1,$2,'viewer'),($3,$4,'editor')", [sourceParent.id, viewer.id, destination.id, editor.id]);
@@ -198,8 +199,9 @@ it("previews access changes and moves a page tree with redirects, keeping trash 
 
 it("halts a running migration when admin authority is removed and can resume later", async () => {
   const sourceParent = await r.create(owner, "Revoke source", sourceSpace);
-  const root = await r.create(owner, "Revoke root", sourceSpace, sourceParent.id);
+  const root = await r.create(owner, "Revoke root", sourceSpace);
   const child = await r.create(owner, "Revoke child", sourceSpace, root.id);
+  await db.query('UPDATE hs_pages SET parent_id=$2 WHERE id=$1',[root.id,sourceParent.id]);
   const destination = await r.create(owner, "Revoke destination", openSpace);
   const preview = await previewSpaceMigration(r, admin, ws, { rootPageId: root.id, targetSpaceId: openSpace, parentId: destination.id });
   const started = await startSpaceMigration(r, admin, ws, { rootPageId: root.id, targetSpaceId: openSpace, parentId: destination.id, operationId: crypto.randomUUID(), previewDigest: preview.digest, confirmAccess: true });
@@ -224,8 +226,9 @@ it("halts a running migration when admin authority is removed and can resume lat
 
 it("binds a migration to its initiating admin and halts after concurrent tree changes", async () => {
   const sourceParent = await r.create(owner, "Concurrent source", sourceSpace);
-  const root = await r.create(owner, "Concurrent root", sourceSpace, sourceParent.id);
+  const root = await r.create(owner, "Concurrent root", sourceSpace);
   await r.create(owner, "Concurrent child", sourceSpace, root.id);
+  await db.query('UPDATE hs_pages SET parent_id=$2 WHERE id=$1',[root.id,sourceParent.id]);
   const destination = await r.create(owner, "Concurrent destination", openSpace);
   const preview = await previewSpaceMigration(r, admin, ws, { rootPageId: root.id, targetSpaceId: openSpace, parentId: destination.id });
   const started = await startSpaceMigration(r, admin, ws, { rootPageId: root.id, targetSpaceId: openSpace, parentId: destination.id, operationId: crypto.randomUUID(), previewDigest: preview.digest, confirmAccess: true });
