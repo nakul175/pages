@@ -38,3 +38,22 @@ for(const width of [1440,390,320])test(`editor WCAG text contrast and usable con
   await expect(page.getByRole('heading',{name:'Insert a block',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Browse all blocks',exact:true})).toBeFocused();
 });
+
+test('focused toolbars preserve selection through colour palettes and avoid duplicate controls',async({page,request})=>{
+ await page.setViewportSize({width:1440,height:900});
+ const created=await request.post(origin+'/api/pages',{headers:{Origin:origin},data:{title:'Disposable focused toolbox fixture',spaceId:'space-product'}});
+ expect(created.status()).toBe(200);const id=(await created.json()).page.id;await page.goto('/pages/'+id);
+ const editor=page.getByRole('textbox',{name:'Document content',exact:true});await editor.fill('Palette selection survives');await editor.press('ControlOrMeta+a');
+ const top=page.getByRole('group',{name:'Top editor toolbox',exact:true}),rail=page.getByRole('complementary',{name:'Editor toolbox',exact:true});
+ await expect(top.getByRole('button',{name:'Bold',exact:true})).toHaveCount(1);await expect(rail.getByRole('button',{name:'Bold',exact:true})).toHaveCount(0);
+ await expect(top.getByRole('button',{name:'H1 Heading',exact:true})).toHaveCount(0);await expect(rail.getByRole('button',{name:'H1 Heading',exact:true})).toHaveCount(1);
+ await top.getByRole('button',{name:'Text colour',exact:true}).click();
+ const colour=page.getByRole('dialog',{name:'Text colour',exact:true});await expect(colour).toBeVisible();await colour.getByRole('button',{name:'Blue',exact:true}).click();await expect(colour).toHaveCount(0);
+ await expect.poll(async()=>JSON.stringify(await(await request.get(origin+'/api/v1/pages/'+id+'/document')).json())).toContain('textStyle');
+ await top.getByRole('button',{name:'Text highlight',exact:true}).click();const highlight=page.getByRole('dialog',{name:'Text highlight',exact:true});await highlight.getByRole('button',{name:'Amber',exact:true}).click();
+ await expect(page.locator('.rich-prose mark')).toHaveText('Palette selection survives');
+ await top.getByRole('button',{name:'Text colour',exact:true}).click();await page.keyboard.press('Escape');await expect(top.getByRole('button',{name:'Text colour',exact:true})).toBeFocused();await expect(colour).toHaveCount(0);
+ const row=await top.locator('button').evaluateAll(elements=>elements.map(e=>Math.round(e.getBoundingClientRect().top)));expect(new Set(row).size).toBe(1);
+ const column=await rail.locator('.toolbox-insert-grid button').evaluateAll(elements=>elements.map(e=>Math.round(e.getBoundingClientRect().left)));expect(new Set(column).size).toBe(1);
+ await top.getByRole('button',{name:'Clear formatting',exact:true}).click();await expect(page.locator('.rich-prose mark')).toHaveCount(0);
+});
