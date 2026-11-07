@@ -38,7 +38,8 @@ async function chain(titles: string[]) {
   const pages = [];
   let parent: string | null = null;
   for (const title of titles) {
-    const page = await r.create(owner, title, "space-product", parent);
+    const page = await r.create(owner, title, "space-product", pages.length<2?parent:null);
+    if(pages.length>=2)await db.query('UPDATE hs_pages SET parent_id=$2 WHERE id=$1',[page.id,parent]);
     pages.push(page);
     parent = page.id;
   }
