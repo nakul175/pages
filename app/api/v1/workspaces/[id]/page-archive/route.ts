@@ -29,7 +29,8 @@ export async function POST(request:Request,context:Context){return api(request,a
   if(action==='preview')return {pageId,count:descendants.rows.length,archived:!!page.archived_at};
   const changed=await tx.query<{id:string}>(action==='archive'
    ?`UPDATE hs_pages SET archived_at=now() WHERE id=ANY($1::text[]) AND archived_at IS NULL RETURNING id`
-   :`UPDATE hs_pages SET archived_at=NULL WHERE id=ANY($1::text[]) AND archived_at=$2 RETURNING id`,action==='archive'?[descendants.rows.map(item=>item.id)]:[descendants.rows.map(item=>item.id),page.archived_at]);
+   :`WITH batch AS (SELECT archived_at FROM hs_pages WHERE id=$2) UPDATE hs_pages p SET archived_at=NULL FROM batch WHERE p.id=ANY($1::text[]) AND p.archived_at=batch.archived_at RETURNING p.id`,action==='archive'?[descendants.rows.map(item=>item.id)]:[descendants.rows.map(item=>item.id),pageId]);
+  if(action==='restore'&&changed.rows.length===0)throw new DocumentError('Page could not be restored. Refresh archived pages and try again.','archive_conflict',409);
   await tx.query('UPDATE hs_workspaces SET tree_version=tree_version+1 WHERE id=$1',[workspaceId]);
   await tx.query(`INSERT INTO hs_audit(id,actor_id,action,page_id,correlation_id,before_value,after_value) VALUES(gen_random_uuid(),$1,$2,$3,gen_random_uuid(),$4::jsonb,$5::jsonb)`,[actor.id,`page.${action}`,pageId,JSON.stringify({archived:!!page.archived_at}),JSON.stringify({archived:action==='archive',count:changed.rows.length})]);
   return {pageId,count:changed.rows.length,archived:action==='archive'};
