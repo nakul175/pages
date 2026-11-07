@@ -17,7 +17,13 @@ export default function PageOutline({documentHost,preferenceKey,available,pageId
  const confirmed=useRef<ReadonlySet<string>>(new Set());
  const saved=useMemo(()=>available&&savedDocument!==undefined?savedHeadingIds(savedDocument):null,[available,savedDocument]);
  if(!available)confirmed.current=new Set();else if(saved)confirmed.current=saved;
- function close(){setOpen(false);const button=opener.current,details=button?.closest('details');if(button?.isConnected){if(details)details.querySelector('summary')?.focus({preventScroll:true});else button.focus({preventScroll:true});}temporary.current=restoreTemporarySections(temporary.current);setSnapshot({root:null,headings:[],key:''});selectedId.current='';setSelected('');setNotice('');}
+ function close(){const scroll={left:window.scrollX,top:window.scrollY},anchor=document.documentElement.style,previousAnchor=anchor.getPropertyValue('overflow-anchor'),previousPriority=anchor.getPropertyPriority('overflow-anchor');anchor.setProperty('overflow-anchor','none');setOpen(false);const button=opener.current,details=button?.closest('details');if(button?.isConnected){if(details)details.querySelector('summary')?.focus({preventScroll:true});else button.focus({preventScroll:true});}temporary.current=restoreTemporarySections(temporary.current);
+  // Closing temporarily expanded sections can trigger browser scroll anchoring.
+  // Flush their layout before restoring the reader's exact viewport.
+  documentHost.current?.getBoundingClientRect();
+  window.scrollTo({...scroll,behavior:'instant'});
+  requestAnimationFrame(()=>{window.scrollTo({...scroll,behavior:'instant'});if(previousAnchor)anchor.setProperty('overflow-anchor',previousAnchor,previousPriority);else anchor.removeProperty('overflow-anchor');});
+  setSnapshot({root:null,headings:[],key:''});selectedId.current='';setSelected('');setNotice('');}
  useEffect(()=>{
   if(!open)return;
   panel.current?.querySelector<HTMLElement>('button')?.focus();
