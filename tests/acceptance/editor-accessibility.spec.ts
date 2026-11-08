@@ -92,7 +92,10 @@ test('list picker saves a numbered list and page actions remain discoverable',as
  await expect(menu.getByRole('button',{name:'My saved pages',exact:true})).toBeVisible();
  await expect(menu.getByRole('button',{name:'History',exact:true})).toBeHidden();
  await menu.getByRole('button',{name:'Governance',exact:true}).click();
+ await expect(menu.getByRole('button',{name:'Change owner',exact:true})).toBeVisible();
+ await expect(menu.getByRole('button',{name:'Review and publishing',exact:true})).toBeHidden();
  await menu.getByRole('button',{name:'Browse all page actions',exact:true}).click();
+ await expect(menu.getByRole('button',{name:'Review and publishing',exact:true})).toBeVisible();
  await expect(menu.getByRole('button',{name:'History',exact:true})).toBeVisible();
  await menu.getByRole('button',{name:'Content',exact:true}).click();
  await menu.getByRole('textbox',{name:'Find page action',exact:true}).fill('Backlinks');
