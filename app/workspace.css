@@ -119,6 +119,7 @@ a.variant-switcher-link:link,a.variant-switcher-link:visited,a.variant-diff-link
 .page-action-group { display:grid; gap:2px; }
 .page-action-group[hidden],.page-action-group > [hidden] { display:none!important; }
 .page-action-group:not(.expanded) > :nth-child(n+6) { display:none; }
+.page-action-group[data-category="governance"]:not(.expanded) > :nth-child(n+2) { display:none; }
 .page-action-expand { border-top:1px solid var(--line)!important; color:var(--navy)!important; }
 .page-tools-menu button { justify-content:flex-start; width:100%; text-align:left; font-size:13px; }
 .governance-controls { display:grid; }
