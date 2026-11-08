@@ -26,6 +26,7 @@ for(const width of [1440,390,320])test(`editor WCAG text contrast and usable con
     }));
     expect(undersized).toEqual([]);
   }
+  if(width<760)await page.getByRole('button',{name:'Open toolbox',exact:true}).click();
   await page.getByRole('button',{name:/More blocks/,exact:false}).click();
   await page.getByRole('button',{name:'Browse all blocks',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Insert a block',exact:true});
@@ -70,7 +71,8 @@ for(const width of [320,800,1440,1920])test(`document aligns with formatting row
  expect(Math.abs(bounds.cardLeft-bounds.toolbarLeft)).toBeLessThanOrEqual(1);
  expect(Math.abs(bounds.cardRight-bounds.toolbarRight)).toBeLessThanOrEqual(1);
  expect(bounds.gap).toBeLessThanOrEqual(22);
- expect(bounds.cardRight).toBeLessThan(bounds.railLeft);
+ if(width>600)expect(bounds.cardRight).toBeLessThan(bounds.railLeft);
+ else expect(bounds.cardRight-bounds.cardLeft).toBeGreaterThanOrEqual(width-24);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
 });
 
@@ -101,4 +103,64 @@ test('list picker saves a numbered list and page actions remain discoverable',as
  await menu.getByRole('textbox',{name:'Find page action',exact:true}).fill('Backlinks');
  await expect(menu.getByRole('button',{name:'Backlinks',exact:true})).toBeVisible();
  await page.screenshot({path:test.info().outputPath('page-actions-and-numbered-list.png')});
+});
+
+test('sidebar page dialog stays readable and mobile insert tools leave document width',async({page,request})=>{
+ const created=await request.post(origin+'/api/pages',{headers:{Origin:origin},data:{title:'Disposable dialog contrast fixture',spaceId:'space-product'}});
+ expect(created.status()).toBe(200);const id=(await created.json()).page.id;
+ await page.goto('/pages/'+id);
+ await page.locator('.page-tree-add').first().click();
+ const dialog=page.getByRole('dialog',{name:/New page in/});
+ await expect(dialog).toBeVisible();
+ await expect(dialog).toHaveCSS('color','rgb(27, 29, 53)');
+ await expect(dialog).toHaveCSS('background-color','rgb(255, 255, 255)');
+ await expect(dialog.getByRole('button',{name:'Cancel',exact:true})).toHaveCSS('color','rgb(27, 29, 53)');
+ await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.setViewportSize({width:390,height:844});await page.reload();
+ await expect(page.locator('.document>article')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Open toolbox',exact:true})).toBeVisible();
+ const width=await page.locator('.document>article').evaluate(element=>element.getBoundingClientRect().width);
+ expect(width).toBeGreaterThanOrEqual(350);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+ await page.getByRole('button',{name:'Open toolbox',exact:true}).click();
+ await expect(page.getByRole('button',{name:'More blocks',exact:false})).toBeVisible();
+});
+
+test('mobile Search shows results before optional filters and aligns archived checkbox',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/search');
+ await expect(page.getByRole('heading',{name:'Search',exact:true})).toBeVisible();
+ await page.getByRole('combobox',{name:'Search titles and content'}).fill('fixture');
+ const toggle=page.getByRole('button',{name:'Show filters',exact:true});
+ await expect(toggle).toBeVisible();
+ await expect(page.getByRole('listbox',{name:'Search results'})).toBeVisible();
+ await toggle.click();
+ const archived=page.getByRole('checkbox',{name:'Include archived',exact:true});
+ await expect(archived).toBeVisible();
+ const label=page.locator('.hs-search-filters label').filter({has:archived});
+ const bounds=await label.evaluate(element=>{const input=element.querySelector('input')!.getBoundingClientRect(),text=element.getBoundingClientRect();return {inputTop:input.top,inputHeight:input.height,labelHeight:text.height};});
+ expect(bounds.inputHeight).toBeLessThanOrEqual(20);
+ expect(bounds.labelHeight).toBeLessThanOrEqual(48);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('template gallery titles remain visible on white cards',async({page})=>{
+ await page.goto('/workspaces');
+ await page.getByRole('button',{name:'From template',exact:true}).click();
+ const card=page.locator('.template-cards button').first();
+ await expect(card).toBeVisible();
+ await expect(card).toHaveCSS('background-color','rgb(255, 255, 255)');
+ await expect(card).toHaveCSS('color','rgb(27, 29, 53)');
+ await expect(card.locator('strong')).not.toBeEmpty();
+});
+
+test('space home creates a page in the current space',async({page,request})=>{
+ const reply=await request.get('/api/spaces');expect(reply.status()).toBe(200);
+ const space=(await reply.json()).spaces.find((item:{id:string})=>item.id==='space-product');expect(space).toBeTruthy();
+ await page.goto(`/workspaces/${encodeURIComponent(space.workspaceId)}/spaces/${encodeURIComponent(space.id)}`);
+ await page.getByText('Organize space',{exact:true}).click();
+ await page.getByRole('button',{name:`Create a page in ${space.name}`,exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Create a page',exact:true});await expect(dialog).toBeVisible();
+ await expect(dialog.getByRole('combobox',{name:'Space',exact:true})).toHaveValue(space.id);
+ await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
 });

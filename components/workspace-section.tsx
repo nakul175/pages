@@ -15,7 +15,7 @@ export function WorkspaceSection({workspaceId, section, spaces = [], children}: 
     <nav aria-label="Workspace navigation">
       <a href={base + '/spaces'} aria-current={section === 'Spaces' ? 'location' : undefined}><UiIcon name="folder"/>Spaces</a>
       <a href={base + '/snippets'} aria-current={section === 'Snippets' ? 'location' : undefined}><UiIcon name="document"/>Snippets</a>
-      {spaces.length > 0 && <div className="workspace-space-links">{spaces.map(space => <a key={space.id} href={base + "/spaces/" + encodeURIComponent(space.id)}><UiIcon name="folder"/>{space.name}</a>)}</div>}
+      {spaces.length > 0 && <div className="workspace-space-links">{spaces.slice().sort((a,b) => a.name.localeCompare(b.name)).slice(0,8).map(space => <a key={space.id} href={base + "/spaces/" + encodeURIComponent(space.id)}><UiIcon name="folder"/>{space.name}</a>)}{spaces.length > 8 && <a href={base + '/spaces'}>Browse all spaces</a>}</div>}
       <button className="section-access" onClick={() => setDialog('access')}><UiIcon name="users"/>Workspace access</button>
     </nav>
     {children}

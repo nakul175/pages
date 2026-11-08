@@ -16,6 +16,7 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
   const [busy, setBusy] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState("");
   const [creatingSpace, setCreatingSpace] = useState(false);
+  const [spaceQuery, setSpaceQuery] = useState("");
   const [archivedPages, setArchivedPages] = useState<{id:string;title:string;space_name:string}[] | null>(null);
   const [rootPageId, setRootPageId] = useState("");
   const [targetSpaceId, setTargetSpaceId] = useState("");
@@ -26,6 +27,7 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
   const [confirm, setConfirm] = useState(false);
   const [job, setJob] = useState<MigrationJob | null>(null);
   const endpoint = `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/spaces/directory`;
+  const visibleSpaces = view?.spaces.filter(space => space.name.toLocaleLowerCase().includes(spaceQuery.trim().toLocaleLowerCase())) ?? [];
 
   const load = useCallback(() => {
     const query = includeArchived ? "?archived=1" : "";
@@ -166,8 +168,8 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
     {error && <p role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
     {!view && !error && <p role="status">Opening spaces…</p>}
-    {view && <section className="directory-card"><div className="directory-card-heading"><h2>Workspace spaces</h2><label><input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} /> Include archived</label></div><ul className="space-directory-list">
-      {view.spaces.map(space => <li key={space.id}>
+    {view && <section className="directory-card"><div className="directory-card-heading"><h2>Workspace spaces</h2><label><input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} /> Include archived</label></div>{view.spaces.length > 6 && <label className="space-directory-search">Find a space<input type="search" value={spaceQuery} onChange={event => setSpaceQuery(event.target.value)} placeholder="Search spaces" /></label>}<ul className="space-directory-list">
+      {visibleSpaces.map(space => <li key={space.id}>
         <div className="directory-space"><i aria-hidden="true"><UiIcon name="folder"/></i><div>
           <a href={`/workspaces/${encodeURIComponent(workspaceId)}/spaces/${encodeURIComponent(space.id)}`}>{space.name}</a>
           <span>{labels[space.visibility]}{space.archived ? " · Archived" : ""}{space.archivedAtIst ? ` · ${space.archivedAtIst}` : ""}</span>
@@ -182,7 +184,7 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
           </details>}
         </div>
       </li>)}
-      {!view.spaces.length && <li>No spaces to show.</li>}
+      {!visibleSpaces.length && <li>{spaceQuery ? "No spaces match this search." : "No spaces to show."}</li>}
     </ul></section>}
     {view?.canAdminister && moveOpen && <section aria-labelledby="move-tree-heading" className="space-migration">
       <h2 id="move-tree-heading" tabIndex={-1} ref={moveHeading}>Move a page tree</h2>

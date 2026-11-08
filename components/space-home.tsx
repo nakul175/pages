@@ -14,6 +14,9 @@ import {
   type SpaceHomeView,
 } from "../lib/space-home-shared";
 import { SPACE_ARCHIVED_BANNER } from "../lib/space-directory-shared";
+import type { Space } from "../lib/types";
+import CreatePage from "./create-page-dialog";
+import TemplatesDialog from "./templates-dialog";
 
 type PinsProps = {
   pins: SpaceHomePinView[];
@@ -75,7 +78,21 @@ export default function SpaceHome({ workspaceId, spaceId }: { workspaceId: strin
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [candidate, setCandidate] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [creationSpace, setCreationSpace] = useState<Space | null>(null);
   const endpoint = `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/spaces/${encodeURIComponent(spaceId)}/home`;
+  async function createInSpace() {
+    try {
+      const response = await requestJson<{spaces: Space[]}>("/api/spaces");
+      const space = response.spaces.find(item => item.id === spaceId && item.workspaceId === workspaceId);
+      if (!space) throw new Error("This space is unavailable.");
+      setCreationSpace(space);
+      setCreateOpen(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The space could not be loaded.");
+    }
+  }
   useEffect(() => {
     let alive = true;
     const load = () => {
@@ -157,7 +174,7 @@ export default function SpaceHome({ workspaceId, spaceId }: { workspaceId: strin
             <label>Pin a page <select aria-label="Pin a page" value={candidate} disabled={busy} onChange={event => setCandidate(event.target.value)}>{shownHome.pinCandidates.map(item => <option key={item.pageId} value={item.pageId}>{item.title}</option>)}</select></label>
             <button type="submit" disabled={busy || !candidate}>Pin page</button>
           </form></>}
-        <a href="/workspaces">Create a page</a>
+        <button type="button" onClick={() => void createInSpace()}>Create a page in {shownHome.spaceName}</button>
       </details>}
       <div className="space-home-widgets">
         {shownHome.widgets.pinned.length > 0 && <section aria-labelledby="space-home-pinned-heading">
@@ -198,5 +215,5 @@ export default function SpaceHome({ workspaceId, spaceId }: { workspaceId: strin
         </section>
       </div>
     </div>}
-  </main></WorkspaceSection>;
+  </main>{createOpen && creationSpace && <CreatePage workspaceId={workspaceId} spaces={[creationSpace]} onClose={() => setCreateOpen(false)} onTemplates={() => { setCreateOpen(false); setTemplatesOpen(true); }} onCreated={page => { window.location.href = `/pages/${encodeURIComponent(page.id)}`; }}/>}{templatesOpen && creationSpace && <TemplatesDialog workspaceId={workspaceId} initialSpaceId={spaceId} spaces={[creationSpace]} onClose={() => setTemplatesOpen(false)} onCreated={id => { window.location.href = `/pages/${encodeURIComponent(id)}`; }}/>}</WorkspaceSection>;
 }

@@ -123,6 +123,7 @@ function RichEditorCore({topToolboxHost,document,editable,onChange,onCollaborati
   const [transformOpen,setTransformOpen]=useState(false),[transformPlan,setTransformPlan]=useState<TransformPlan|null>(null);
   const [inspectedLink,setInspectedLink]=useState<InspectedLink|null>(null);
   const [toolboxOpen,setToolboxOpen]=useState(true),[toolboxPinned,setToolboxPinned]=useState(true),[moreBlocks,setMoreBlocks]=useState(false),[listOpen,setListOpen]=useState(false),[listAnchor,setListAnchor]=useState({top:0,left:0});
+  useEffect(()=>{if(window.matchMedia('(max-width:600px)').matches)setToolboxOpen(false);},[]);
   const [tableGuides,setTableGuides]=useState(false);
   const [pasteReview,setPasteReview]=useState<{source:TablePasteSource;point:PastePoint}|null>(null),[plainPoint,setPlainPoint]=useState<PastePoint|null>(null);
   const [tableCopyFallback,setTableCopyFallback]=useState<string|null>(null),tableCopyAttempt=useRef(0);
