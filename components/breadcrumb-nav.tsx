@@ -145,5 +145,5 @@ export function PageUnavailable({ pageId, message, authRequired }: { pageId: str
     return () => { live = false; };
   }, [pageId, message, authRequired]);
   if (!message) return <>Opening your page…</>;
-  return <span className="breadcrumb-state" role="status">{text || "Opening your page…"}</span>;
+  return <span className="page-access-state" role="status">{text || "Opening your page…"}</span>;
 }
