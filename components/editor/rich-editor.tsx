@@ -122,7 +122,7 @@ function RichEditorCore({topToolboxHost,document,editable,onChange,onCollaborati
   const [insertOpen,setInsertOpen]=useState(false),[query,setQuery]=useState(""),[active,setActive]=useState(0),[notice,setNotice]=useState(""),[linkOpen,setLinkOpen]=useState(false),[pageOpen,setPageOpen]=useState(false),[snippetOpen,setSnippetOpen]=useState(false),[recordOpen,setRecordOpen]=useState(false),[viewOpen,setViewOpen]=useState(false),[media,setMedia]=useState<"image"|"file"|null>(null),[findOpen,setFindOpen]=useState(false),[findQuery,setFindQuery]=useState(""),[matchCase,setMatchCase]=useState(false),[wholeWords,setWholeWords]=useState(false),[matchIndex,setMatchIndex]=useState(0);
   const [transformOpen,setTransformOpen]=useState(false),[transformPlan,setTransformPlan]=useState<TransformPlan|null>(null);
   const [inspectedLink,setInspectedLink]=useState<InspectedLink|null>(null);
-  const [toolboxOpen,setToolboxOpen]=useState(true),[toolboxPinned,setToolboxPinned]=useState(true),[moreBlocks,setMoreBlocks]=useState(false);
+  const [toolboxOpen,setToolboxOpen]=useState(true),[toolboxPinned,setToolboxPinned]=useState(true),[moreBlocks,setMoreBlocks]=useState(false),[listOpen,setListOpen]=useState(false),[listAnchor,setListAnchor]=useState({top:0,left:0});
   const [tableGuides,setTableGuides]=useState(false);
   const [pasteReview,setPasteReview]=useState<{source:TablePasteSource;point:PastePoint}|null>(null),[plainPoint,setPlainPoint]=useState<PastePoint|null>(null);
   const [tableCopyFallback,setTableCopyFallback]=useState<string|null>(null),tableCopyAttempt=useRef(0);
@@ -209,7 +209,7 @@ function RichEditorCore({topToolboxHost,document,editable,onChange,onCollaborati
   const filtered=catalogue.filter(c=>(mediaEnabled||!['image','file'].includes(c.type))&&(c.name+" "+c.description).toLowerCase().includes(query.toLowerCase()));
   function closeInsert(){if(slash.current&&query)editor?.chain().focus().insertContent('/'+query).run();else if(slash.current)editor?.chain().focus().insertContent('/').run();slash.current=false;setInsertOpen(false);}
   function insert(item:Insert){
-    if(!editor||!editable)return;setInsertOpen(false);slash.current=false;
+    if(!editor||!editable)return;setInsertOpen(false);setMoreBlocks(false);setListOpen(false);slash.current=false;
     if(item.type==="pageLink"){setPageOpen(true);return;}if(item.type==="recordRef"){setRecordOpen(true);return;}if(item.type==="recordView"){setViewOpen(true);return;}if(item.type==="image"||item.type==="file"){openMedia(item.type);return;}
     const chain=editor.chain().focus();if(insertAt.current!==null)chain.setTextSelection(insertAt.current);
     if(item.type==="paragraph")chain.setParagraph().run();
@@ -268,14 +268,14 @@ function RichEditorCore({topToolboxHost,document,editable,onChange,onCollaborati
   const insertKind=(type:string)=>{const item=catalogue.find(candidate=>candidate.type===type);if(item)insert(item);};
   function insertButtons() {
     const blocks = [
-      ['heading', 'H1', 'Heading'], ['bulletList', '☷', 'List'], ['taskList', '☑', 'Checklist'],
+      ['heading', 'H1', 'Heading'], ['bulletList', '☷', 'List'],
       ['table', '▦', 'Table'], ['image', '▧', 'Image'], ['subpage', '＋', 'Subpage'],
     ];
     return blocks.filter(([kind])=>kind!=='subpage'||!!onCreateSubpage).map(([kind, icon, label]) => (
       <button key={kind} type="button" aria-label={`${icon} ${label}`} title={label} disabled={!editable || (kind === 'image' && !mediaEnabled)}
         onMouseDown={event => event.preventDefault()}
         onClick={kind === 'subpage' ? onCreateSubpage : () => insertKind(kind)}>
-        <UiIcon name={(['heading','list','checklist','table','image','subpage'] as const)[blocks.findIndex(block=>block[0]===kind)]}/><span className="toolbox-button-label">{label}</span>
+        <UiIcon name={(['heading','list','table','image','subpage'] as const)[blocks.findIndex(block=>block[0]===kind)]}/><span className="toolbox-button-label">{label}</span>
       </button>
     ));
   }
@@ -296,14 +296,13 @@ function RichEditorCore({topToolboxHost,document,editable,onChange,onCollaborati
       {toolboxOpen&&<div className="editor-toolbox-body">
         {!topToolboxHost&&<section aria-label="Text formatting">{toolbar()}</section>}
         <section aria-labelledby="toolbox-insert"><div className="toolbox-section-heading"><span id="toolbox-insert" className="toolbox-label">Insert</span></div><div className="toolbox-insert-grid">
-          {insertButtons()}
+          {insertButtons().map(button=>button.key==='bulletList'?<div className="toolbox-list-picker" key="list-picker">{<button type="button" aria-label="List" title="List" aria-haspopup="true" aria-expanded={listOpen} disabled={!editable} onClick={event=>{const rect=event.currentTarget.getBoundingClientRect();setListAnchor({top:Math.max(8,Math.min(rect.top,window.innerHeight-160)),left:Math.max(8,rect.left-176)});setListOpen(value=>!value);setMoreBlocks(false);}}><UiIcon name="list"/><span className="toolbox-button-label">List</span></button>}{listOpen&&<div className="toolbox-list-options" role="group" aria-label="List styles" style={listAnchor}>{([['bulletList','Bulleted list'],['orderedList','Numbered list'],['taskList','Checklist']] as const).map(([kind,label])=><button key={kind} type="button" onMouseDown={event=>event.preventDefault()} onClick={()=>insertKind(kind)}>{label}</button>)}</div>}</div>:button)}
         </div><button type="button" className="toolbox-more" aria-label="More blocks" title="More blocks" aria-expanded={moreBlocks} onClick={()=>setMoreBlocks(value=>!value)}><span aria-hidden="true">{moreBlocks?'−':'+'}</span></button>{moreBlocks&&<div className="toolbox-more-grid"><button type="button" aria-label={toolboxPinned?'Unpin toolbox':'Pin toolbox'} aria-pressed={toolboxPinned} onClick={()=>setToolboxPinned(value=>!value)}>{toolboxPinned?'Unpin toolbox':'Pin toolbox'}</button><button type="button" disabled={!editable} onClick={()=>{try{turnIntoSyncedBlock(editor);setNotice("Synced block created. Copy synced block to place it on another page.");}catch(error){setNotice(error instanceof Error?error.message:"Select the blocks to sync.");}}}>Turn into synced block</button><button type="button" disabled={!editable} onClick={()=>setSnippetOpen(true)}>Insert snippet</button><button type="button" disabled={!editable} onClick={()=>insertKind('blockquote')}>Quote</button><button type="button" disabled={!editable} onClick={()=>insertKind('callout')}>Callout</button><button type="button" disabled={!editable} onClick={()=>insertKind('horizontalRule')}>Divider</button><button type="button" disabled={!editable} onClick={()=>insertKind('codeBlock')}>Code</button><button type="button" disabled={!editable} onClick={()=>insertKind('details')}>Section</button><button type="button" disabled={!editable} onClick={()=>insertKind('pageLink')}>Page link</button><button type="button" disabled={!editable} onClick={()=>insertKind('recordRef')}>Record</button><button type="button" disabled={!editable} onClick={()=>insertKind('recordView')}>Records view</button><button type="button" className="toolbox-browse" disabled={!editable} onClick={addBlock}>Browse all blocks</button></div>}</section>
         <section className="toolbox-utilities" aria-label="Review tools"><button type="button" aria-label="Comments" title="Comments" onClick={onOpenComments}><UiIcon name="comment"/></button><button type="button" aria-label="History" title="History" disabled={!onOpenHistory} onClick={onOpenHistory}><UiIcon name="history"/></button></section>
       </div>}
     </aside>}
     <BubbleMenu editor={editor} className="floating-format" shouldShow={()=>!topToolboxHost&&editable&&editor.state.selection instanceof TextSelection&&!editor.state.selection.empty&&!editor.isActive('codeBlock')&&(editor.isFocused||!!window.document.activeElement?.closest('.floating-format'))&&matchMedia('(min-width: 761px)').matches}>{toolbar()}</BubbleMenu>
-    <ChecklistProgressStatus key={`checklist:${pageId}:${recoveryActorId??''}:${editable}`} value={state?.checklistProgress??null}/>
-    <UncheckedNavigationControls key={JSON.stringify([pageId,recoveryActorId,editable,preferenceKey])} editor={editor} list={state?.uncheckedList??null} preferenceKey={preferenceKey}/>
+    {state?.checklistProgress&&<div className="checklist-context-chip" aria-label="Current checklist"><ChecklistProgressStatus key={`checklist:${pageId}:${recoveryActorId??''}:${editable}`} value={state.checklistProgress}/><UncheckedNavigationControls key={JSON.stringify([pageId,recoveryActorId,editable,preferenceKey])} editor={editor} list={state?.uncheckedList??null} preferenceKey={preferenceKey}/></div>}
     <TablePositionStatus key={`${pageId}:${recoveryActorId??''}:${editable}`} contextKey={`${pageId}:${recoveryActorId??''}:${editable}`} description={state?.tablePosition??''}/>
     <CodePositionStatus key={`code-position:${JSON.stringify([pageId,recoveryActorId,editable,preferenceKey])}`} contextKey={JSON.stringify([pageId,recoveryActorId,editable,preferenceKey])} position={state?.codePosition??null}/>
     {state?.table&&<div className="context-tools table-reading-guide-tools" role="group" aria-label="Table reading guides"><button type="button" aria-pressed={tableGuides} onMouseDown={event=>event.preventDefault()} onClick={()=>{const next=!tableGuides;setTableGuides(next);setTableReadingGuides(editor,next);setNotice(next?'Table reading guides on.':'Table reading guides off.');}}>Reading guides {tableGuides?'on':'off'}</button><small>Temporary row and column outlines. Not saved.</small></div>}

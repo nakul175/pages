@@ -1,3 +1,4 @@
+import {choosePageAction} from './page-action-helper';
 import {createServer,request as httpRequest} from 'node:http';
 import {createConnection,type AddressInfo,type Socket} from 'node:net';
 import {type APIRequestContext, type Page as BrowserPage} from '@playwright/test';
@@ -10,7 +11,7 @@ async function fixture(request:APIRequestContext,origin:string){
  const document={type:'doc',content:[heading(id('first'),'Résumé 界 مرحبا'),{type:'details',attrs:{id:id('outer')},content:[{type:'detailsSummary',attrs:{id:id('summary')},content:[{type:'text',text:'Optional section'}]},{type:'detailsContent',attrs:{id:id('body')},content:[heading(id('nested'),'Repeated heading')]}]},heading(id('other'),'Repeated heading'),{type:'paragraph',attrs:{id:id('tail')},content:[{type:'text',text:'Saved typing target'}]}]};
  const saved=await request.post(`/api/v1/pages/${p.id}/operations`,{headers:{Origin:origin},data:{operationId:crypto.randomUUID(),baseVersion:p.version,title:p.title,document}});expect(saved.status()).toBe(200);return {page:(await saved.json()).page as Stored,id};
 }
-async function openOutline(page:BrowserPage){await page.getByLabel('Page options',{exact:true}).click();await page.getByRole('button',{name:'Page outline',exact:true}).click();return page.getByRole('dialog',{name:'Page outline',exact:true});}
+async function openOutline(page:BrowserPage){await choosePageAction(page,'Page outline');return page.getByRole('dialog',{name:'Page outline',exact:true});}
 async function model(page:BrowserPage){return page.locator('.rich-prose').evaluate(node=>{const e=(node as HTMLElement&{editor:Editor}).editor;return {document:e.getJSON(),selection:e.state.selection.toJSON(),undo:e.can().undo(),redo:e.can().redo()};});}
 async function stored(request:APIRequestContext,id:string){return (await(await request.get(`/api/v1/pages/${id}/document`)).json()).page as Stored;}
 async function history(request:APIRequestContext,id:string){return (await(await request.get(`/api/v1/pages/${id}/history`)).json()).versions;}
@@ -20,6 +21,7 @@ async function ready(page:BrowserPage,id:string,fragment=''){
 async function observeClipboard(page:BrowserPage){await page.addInitScript(()=>{const target=window as unknown as {headingCopyArguments:string[]};target.headingCopyArguments=[];const clipboard=navigator.clipboard,native=clipboard.writeText.bind(clipboard);clipboard.writeText=(value:string)=>{target.headingCopyArguments.push(value);return native(value);};});}
 
 test('copy uses a saved ID only and leaves exact model, selection, history and document writes unchanged',async({page,request,baseURL})=>{
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:baseURL!});
  const f=await fixture(request,baseURL!),before=await stored(request,f.page.id),versions=await history(request,f.page.id);let operations=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/operations'))operations++;});await observeClipboard(page);await ready(page,f.page.id);const editor=page.getByRole('textbox',{name:'Document content',exact:true});await editor.press('ControlOrMeta+Home');await editor.press('Shift+ArrowRight');
  // Chrome can report the shifted caret on a later selectionchange. Snapshot only after that one-character selection is in the editor model.
  await expect.poll(async()=>(await model(page)).selection).toMatchObject({type:'text',anchor:1,head:2});

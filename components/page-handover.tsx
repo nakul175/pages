@@ -60,7 +60,7 @@ export default function PageHandover({ workspaceId }: { workspaceId: string }) {
       setReport(ownerless);
       const active = members.members.filter(member => member.active && member.role !== "observer");
       setFromUserId(members.members[0]?.id ?? "");
-      setToUserId(active[0]?.id ?? "");
+      setToUserId(active.find(member => member.id !== members.members[0]?.id)?.id ?? "");
       setAssignTo(active[0]?.id ?? "");
     }).catch(reason => {
       if (!controller.signal.aborted) setError(reason instanceof ApiError ? reason.message : "Workspace is restricted or unavailable");
@@ -185,7 +185,8 @@ export default function PageHandover({ workspaceId }: { workspaceId: string }) {
         <label>To <select aria-label="Handover to" value={toUserId} onChange={event => { setToUserId(event.target.value); setPreview(null); }}>
           {recipients.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
         </select></label>
-        <button type="submit" disabled={busy || !fromUserId || !toUserId}>Preview handover</button>
+        <button type="submit" disabled={busy || !fromUserId || !toUserId || fromUserId === toUserId}>Preview handover</button>
+        {fromUserId === toUserId && <p role="status">Choose a different recipient.</p>}
       </form>
       {preview && <>
         <h3>Pages</h3>

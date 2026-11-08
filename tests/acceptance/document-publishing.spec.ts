@@ -1,3 +1,4 @@
+import {choosePageAction} from './page-action-helper';
 import {test, expect} from './acceptance-fixtures';
 import axe from 'axe-core';
 const origin='http://127.0.0.1:53300';
@@ -6,7 +7,7 @@ test('HOLY-63 keyboard and narrow-screen submission preserves an uncertain opera
  const saved=await request.post(`/api/v1/pages/${source.id}/operations`,{headers:{Origin:origin},data:{operationId:crypto.randomUUID(),baseVersion:1,title:source.title,document:{type:'doc',content:[{type:'paragraph',attrs:{id:crypto.randomUUID()},content:[{type:'text',text:'Exact immutable browser review body'}]}]}}});expect(saved.status()).toBe(200);
  const sharing=await(await request.get(`/api/v1/pages/${source.id}/sharing`)).json();const grant=await request.post(`/api/v1/pages/${source.id}/sharing`,{headers:{Origin:origin},data:{operationId:crypto.randomUUID(),expectedVersion:sharing.version,recipientId:'holy63-browser-reviewer',role:'editor'}});expect(grant.status()).toBe(200);
  await page.setViewportSize({width:390,height:844});await page.goto('/pages/'+source.id);await expect(page.getByRole('button',{name:'✓ Saved',exact:true})).toBeVisible();
- await page.getByLabel('Page options',{exact:true}).click();await page.getByRole('button',{name:'Review and publishing',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Review and publishing',exact:true});await expect(dialog).toBeVisible();
+ await choosePageAction(page,'Review and publishing');const dialog=page.getByRole('dialog',{name:'Review and publishing',exact:true});await expect(dialog).toBeVisible();
  await dialog.getByRole('checkbox',{name:'Publishing acceptance reviewer',exact:true}).check();await dialog.getByRole('checkbox',{name:'I understand enabling publishing hides drafts from readers until approval and publication.',exact:true}).check();
  const attempts:string[]=[];let lost=false;await page.route('**/api/v1/pages/'+source.id+'/publishing',async route=>{if(route.request().method()==='POST'&&JSON.parse(route.request().postData()!).action==='configure'){attempts.push(route.request().postData()!);if(!lost){lost=true;const result=await route.fetch();expect(result.status()).toBe(200);await route.abort('failed');return;}}await route.continue();});
  await dialog.getByRole('button',{name:'Enable review and publishing',exact:true}).click();await expect(dialog.getByRole('button',{name:'Retry confirmation',exact:true})).toBeEnabled();await dialog.getByRole('button',{name:'Retry confirmation',exact:true}).click();await expect(dialog.getByText('Saved. Current permissions still apply.',{exact:true})).toBeVisible();expect(attempts).toHaveLength(2);expect(attempts[0]).toBe(attempts[1]);

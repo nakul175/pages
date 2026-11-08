@@ -73,3 +73,29 @@ for(const width of [320,800,1440,1920])test(`document aligns with formatting row
  expect(bounds.cardRight).toBeLessThan(bounds.railLeft);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
 });
+
+test('list picker saves a numbered list and page actions remain discoverable',async({page,request})=>{
+ const created=await request.post(origin+'/api/pages',{headers:{Origin:origin},data:{title:'Disposable page actions fixture',spaceId:'space-product'}});
+ expect(created.status()).toBe(200);const id=(await created.json()).page.id;
+ await page.goto('/pages/'+id);
+ const rail=page.getByRole('complementary',{name:'Editor toolbox',exact:true});
+ await rail.getByRole('button',{name:'List',exact:true}).click();
+ await expect(rail.getByRole('group',{name:'List styles'})).toBeVisible();
+ await rail.getByRole('button',{name:'Numbered list',exact:true}).click();
+ await expect(rail.getByRole('group',{name:'List styles'})).toHaveCount(0);
+ await page.getByRole('textbox',{name:'Document content',exact:true}).type('Numbered fixture');
+ await expect(page.getByRole('button',{name:'✓ Saved',exact:true})).toBeVisible();
+ await expect.poll(async()=>JSON.stringify(await(await request.get(origin+'/api/v1/pages/'+id+'/document')).json())).toContain('orderedList');
+ await expect(page.locator('.checklist-context-chip')).toHaveCount(0);
+ await page.getByLabel('Page options',{exact:true}).click();
+ const menu=page.locator('.page-tools-menu');
+ await expect(menu.getByRole('button',{name:'My saved pages',exact:true})).toBeVisible();
+ await expect(menu.getByRole('button',{name:'History',exact:true})).toBeHidden();
+ await menu.getByRole('button',{name:'Governance',exact:true}).click();
+ await menu.getByRole('button',{name:'Browse all page actions',exact:true}).click();
+ await expect(menu.getByRole('button',{name:'History',exact:true})).toBeVisible();
+ await menu.getByRole('button',{name:'Content',exact:true}).click();
+ await menu.getByRole('textbox',{name:'Find page action',exact:true}).fill('Backlinks');
+ await expect(menu.getByRole('button',{name:'Backlinks',exact:true})).toBeVisible();
+ await page.screenshot({path:test.info().outputPath('page-actions-and-numbered-list.png')});
+});
