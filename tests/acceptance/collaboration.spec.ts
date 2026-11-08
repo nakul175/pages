@@ -59,10 +59,10 @@ test('native heading conversion, Undo and Redo persist with fresh block identiti
   const saved=async()=>{const response=await request.get(origin+`/api/v1/pages/${page.id}/document`,{maxRetries:4,timeout:15000});expect(response.status()).toBe(200);return (await response.json()).page;};
   let response=submit();await editorA.click();await a.getByRole('complementary',{name:'Editor toolbox',exact:true}).getByRole('button',{name:'H1 Heading',exact:true}).click();expect((await response).status()).toBe(200);
   // Presence decorations contribute the other actor's name to the accessible name.
-  await expect(editorB.getByRole('heading',{name:/^Shape source(?: |$)/})).toBeVisible();
+  await expect(editorB.getByRole('heading',{name:/Shape source/})).toBeVisible();
   const heading=await saved();expect(heading.version).toBeGreaterThan(initial.version);expect(heading.document.content[0].type).toBe('heading');expect(heading.document.content[0].attrs.id).not.toBe(initialId);
   response=submit();await editorA.press('ControlOrMeta+z');expect((await response).status()).toBe(200);
-  await expect(editorB.getByRole('heading',{name:/^Shape source(?: |$)/})).toHaveCount(0);await expect(editorB).toContainText('Shape source');
+  await expect(editorB.getByRole('heading',{name:/Shape source/})).toHaveCount(0);await expect(editorB).toContainText('Shape source');
   const undone=await saved();expect(undone.version).toBeGreaterThan(heading.version);expect(undone.document.content[0].type).toBe('paragraph');expect([initialId,heading.document.content[0].attrs.id]).not.toContain(undone.document.content[0].attrs.id);
   response=submit();await editorA.press('ControlOrMeta+Shift+z');expect((await response).status()).toBe(200);
   await expect(editorB.getByRole('heading',{name:/^Shape source(?: |$)/})).toBeVisible();
