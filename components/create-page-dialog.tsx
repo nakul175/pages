@@ -36,7 +36,7 @@ export default function CreatePage({spaces:allSpaces,parent,workspaceId,onClose,
   const subpage=initialAsChild&&!!parent;
   const needsSpace=!spaces.length;
   const form=<>
-    {!subpage&&<button type="button" disabled={busy||unconfirmed||!spaces.length} onClick={templates}>From template</button>}
+    {!subpage&&<button type="button" className="create-page-template-button" disabled={busy||unconfirmed||!spaces.length} onClick={templates}>From template</button>}
     <form className="create-page-form" data-create-mode={subpage?'subpage':'page'} onSubmit={submit}>
       <fieldset style={{border:0,padding:0,margin:0,minWidth:0}} disabled={busy||unconfirmed}>
         <label>{subpage?'Subpage name':'Page name'}<input autoFocus maxLength={240} value={name} onChange={e=>setName(e.target.value)} placeholder="Untitled" required/></label>

@@ -114,6 +114,8 @@ test('sidebar page dialog stays readable and mobile insert tools leave document 
  await expect(dialog).toBeVisible();
  await expect(dialog).toHaveCSS('color','rgb(27, 29, 53)');
  await expect(dialog).toHaveCSS('background-color','rgb(255, 255, 255)');
+ await expect(dialog.getByRole('heading',{name:/New page in/})).toHaveCSS('color','rgb(27, 29, 53)');
+ await expect(dialog.getByRole('heading',{name:/New page in/})).toHaveCSS('font-size','18px');
  await expect(dialog.getByRole('button',{name:'Cancel',exact:true})).toHaveCSS('color','rgb(27, 29, 53)');
  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.setViewportSize({width:390,height:844});await page.reload();
