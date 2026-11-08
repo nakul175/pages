@@ -1,6 +1,7 @@
 import {Pool} from 'pg';
 import type {Database} from '../lib/database';
 import {portalWorkspacePermission} from '../lib/portal-workspace-permissions';
+import {portalScopePermission} from '../lib/portal-scope-permissions';
 import {portalProvision} from '../lib/portal-provisioning';
 
 // No createDatabase(): that routine runs migrations. This connector must never
@@ -23,7 +24,9 @@ try{
   }catch(error){await c.query('ROLLBACK');throw error;}finally{c.release();}},close:async()=>{}};
  const creating=['provision_preview','provision_apply'].includes(input?.operation);
  if(creating&&process.env.HS_PORTAL_PROVISIONING_ENABLED!=='1')throw Error();
- const result=await (creating?portalProvision:portalWorkspacePermission)(db,config,input);
+ const scoped=['scope_inventory','scope_preview','scope_apply'].includes(input?.operation);
+ if(scoped&&process.env.HS_PORTAL_SCOPES_ENABLED!=='1')throw Error();
+ const result=await (creating?portalProvision:scoped?portalScopePermission:portalWorkspacePermission)(db,config,input);
  process.stdout.write(JSON.stringify(result)+'\n');
 }catch{process.stderr.write('Native workspace confirmation unavailable.\n');process.exitCode=1;}
 finally{await pool?.end();clearTimeout(deadline);}
