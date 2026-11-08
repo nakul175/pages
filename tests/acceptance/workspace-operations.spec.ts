@@ -1,8 +1,9 @@
 import {test, expect} from './acceptance-fixtures';
+import {choosePageAction} from './page-action-helper';
 const origin='http://127.0.0.1:53300';
 for(const width of [1280,390])test(`move, Trash and recovery preserve a synthetic page tree at ${width}px`,async({page,request})=>{
  await page.setViewportSize({width,height:900});
- const action=async(name:string)=>{const control=page.getByRole('button',{name,exact:true});if(!await control.isVisible())await page.getByLabel('Page options',{exact:true}).click();await control.click();};
+ const action=async(name:string)=>{const control=page.getByRole('button',{name,exact:true});if(await control.isVisible())await control.click();else await choosePageAction(page,name);};
  const name='Browser tree '+Date.now(),root=await(await request.post('/api/pages',{headers:{Origin:origin},data:{title:name,spaceId:'space-product'}})).json();expect(root.page.id).toBeTruthy();
  const child=await(await request.post('/api/pages',{headers:{Origin:origin},data:{title:'Child '+name,spaceId:'space-product',parentPageId:root.page.id}})).json();expect(child.page.id).toBeTruthy();
  await page.goto('/pages/'+root.page.id);const editor=page.getByRole('textbox',{name:'Document content',exact:true});await editor.fill('Recover this synthetic body');

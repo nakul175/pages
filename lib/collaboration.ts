@@ -17,6 +17,15 @@ export type SubmitInput={sessionId:string;epoch:string;clientId:string;operation
 const digest=(value:unknown)=>createHash('sha256').update(stableStringify(value)).digest('hex');
 const unavailable=()=>new DocumentError('The collaboration session changed. Reopen this page.','collaboration_stale',409);
 
+// Tiptap includes its nullable ordered-list `type` default in collaboration
+// steps. The stored document schema has no such attribute. Canonicalize only
+// that known default before validation; non-default list styles still fail.
+function stripDefaultOrderedListType(node:RichNode):RichNode {
+ const attrs=node.attrs?{...node.attrs}:undefined;
+ if(node.type==='orderedList'&&attrs&&(attrs.type===null||attrs.type==='1'))delete attrs.type;
+ return {...node,...(attrs?{attrs}:{}),...(node.content?{content:node.content.map(stripDefaultOrderedListType)}:{})};
+}
+
 function identities(document:RichNode){return new Map(documentBlocks(document).map(block=>[block.id,block.type]));}
 function protectedAtoms(document:RichNode){const schema=richSchema();return documentBlocks(document).filter(block=>['image','file','pageLink'].includes(block.type)).map(block=>stableStringify(schema.nodeFromJSON(block.node).toJSON())).sort();}
 async function reset(tx:Sql,pageId:string,documentVersion:number,document:RichNode){
@@ -77,7 +86,7 @@ export async function submitCollaboration(r:Repository,actor:Actor,pageId:string
  if(!input.steps.length||input.steps.length>100||Buffer.byteLength(JSON.stringify(input.steps))>256_000)throw new DocumentError('Send between 1 and 100 bounded collaboration steps.','collaboration_steps_invalid',422);
  const schema=richSchema();let document=schema.nodeFromJSON(state.document);const decoded:Step[]=[];
  try{for(const raw of input.steps){const step=Step.fromJSON(schema,raw),result=step.apply(document);if(result.failed||!result.doc)throw new Error('step rejected');document=result.doc;decoded.push(step);}}catch{throw new DocumentError('The collaboration change cannot be applied to this page.','collaboration_steps_invalid',422);}
- const next=validateDocument(document.toJSON());await validateRecordPageReferences(tx,actor,page.workspace_id,next,state.document);const before=identities(state.document),after=identities(next),removed=[...before.keys()].filter(id=>!after.has(id));
+ const next=validateDocument(stripDefaultOrderedListType(document.toJSON()));await validateRecordPageReferences(tx,actor,page.workspace_id,next,state.document);const before=identities(state.document),after=identities(next),removed=[...before.keys()].filter(id=>!after.has(id));
  for(const [id,type] of after){if(before.has(id)&&before.get(id)!==type)throw new DocumentError('Stable block identity cannot change type.','collaboration_identity_invalid',422);}
  if(stableStringify(protectedAtoms(state.document))!==stableStringify(protectedAtoms(next)))throw new DocumentError('Add or remove protected files and page links outside a collaboration session.','collaboration_protected_atom',422);
  if(after.size){const reused=await tx.query<{block_id:string}>('SELECT block_id FROM hs_collaboration_tombstones WHERE page_id=$1 AND block_id=ANY($2::text[])',[pageId,[...after.keys()]]);if(reused.rows.length)throw new DocumentError('A deleted block identity cannot be revived.','collaboration_resurrection',409);}

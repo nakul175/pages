@@ -80,6 +80,7 @@ function RecordDocumentsPanel({ workspaceId, tenantId, recordId }: { workspaceId
       setError("");
     } catch (reason) {
       if (token !== request.current) return;
+      setList(null);
       setError(reason instanceof Error ? reason.message : "This item is restricted or unavailable.");
     }
   }, [applied, recordId, tenantId, workspaceId]);
@@ -124,7 +125,7 @@ function RecordDocumentsPanel({ workspaceId, tenantId, recordId }: { workspaceId
         <button type="button" role="tab" aria-selected={tab === "documents"} onClick={() => setTab("documents")}>Documents</button>
         <button type="button" role="tab" aria-selected={tab === "unlinked"} onClick={() => void openBin()}>Unlinked files</button>
       </div>
-      {error && <p role="alert">{error}</p>}
+      {error && <div role="alert"><p>{error}</p><button type="button" onClick={() => void load()}>Retry linked records</button></div>}
       {tab === "documents" && (
         <>
           <p>{list?.countLabel ?? "Documents you can see"}</p>
@@ -251,7 +252,7 @@ export function LinkedRecords({ pageId }: { pageId: string }) {
           </li>
         ))}
       </ul>
-      {!list?.items.length && <p>No records you can see.</p>}
+      {list && !list.items.length && <p>No records you can see.</p>}
       {list?.canLink && (
         <form aria-label="Add linked record" onSubmit={event => void submit(event)}>
           <label>Record <input name="recordId" aria-label="Record to link" required /></label>

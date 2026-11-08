@@ -1,3 +1,4 @@
+import {choosePageAction} from './page-action-helper';
 import {writeFile} from 'node:fs/promises';
 import {type APIRequestContext, type Page as BrowserPage} from '@playwright/test';
 import {test, expect} from './acceptance-fixtures';
@@ -6,7 +7,7 @@ import {releaseRoutesWhenDone} from './release-routes';
 releaseRoutesWhenDone();
 const heading=(id:string,text:string,level=2)=>({type:'heading',attrs:{id,level},...(text?{content:[{type:'text',text}]}:{})});
 async function fixture(request:APIRequestContext,origin:string,content:unknown[]){const created=await request.post('/api/pages',{headers:{Origin:origin},data:{title:'Disposable HOLY-128 outline fixture '+crypto.randomUUID(),spaceId:'space-product'}});expect(created.status()).toBe(200);const p=(await created.json()).page;const saved=await request.post(`/api/v1/pages/${p.id}/operations`,{headers:{Origin:origin},data:{operationId:crypto.randomUUID(),baseVersion:p.version,title:p.title,document:{type:'doc',content:JSON.parse(JSON.stringify([...content,{type:'paragraph',attrs:{id:'outline-tail'}}],(key,value)=>key==='id'&&typeof value==='string'?p.id+'-'+value:value))}}});expect(saved.status()).toBe(200);return (await(await request.get(`/api/v1/pages/${p.id}/document`)).json());}
-async function openOutline(page:BrowserPage){await page.getByLabel('Page options',{exact:true}).click();await page.getByRole('button',{name:'Page outline',exact:true}).click();return page.getByRole('dialog',{name:'Page outline',exact:true});}
+async function openOutline(page:BrowserPage){await choosePageAction(page,'Page outline');return page.getByRole('dialog',{name:'Page outline',exact:true});}
 const sample=()=>[heading('first','Résumé مرحبا',1),{type:'details',attrs:{id:'outer'},content:[{type:'detailsSummary',attrs:{id:'outer-summary'},content:[{type:'text',text:'Optional sections'}]},{type:'detailsContent',attrs:{id:'outer-body'},content:[{type:'details',attrs:{id:'inner'},content:[{type:'detailsSummary',attrs:{id:'inner-summary'},content:[{type:'text',text:'Nested section'}]},{type:'detailsContent',attrs:{id:'inner-body'},content:[heading('nested-target','Repeated')]}]}]}]},heading('other-target','Repeated'),heading('blank','',3),heading('long','界'.repeat(400),3)];
 test('exact heading navigation temporarily reveals sections, preserves document/selection/history and returns focus without scrolling away',async({page,request,baseURL})=>{
  const origin=baseURL!,data=await fixture(request,origin,sample()),p=data.page,key=`${data.actorId}:${p.workspaceId}:${p.id}`;

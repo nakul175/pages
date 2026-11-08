@@ -17,6 +17,7 @@ import HolySheetBrand from './holy-sheet-brand';
 export default function WorkspaceHome({chooseWorkspace=false}:{chooseWorkspace?:boolean}){
  const router=useRouter();
  const [workspaces,setWorkspaces]=useState<WorkspaceSummary[]>([]),[workspaceId,setWorkspaceId]=useState(''),[spaces,setSpaces]=useState<Space[]>([]),[pages,setPages]=useState<Page[]>([]);
+ const [pageFilter,setPageFilter]=useState(''),[pageLimit,setPageLimit]=useState(30);
  const [workspaceCreationOpen,setWorkspaceCreationOpen]=useState(false);
  const [creationDirty,setCreationDirty]=useState(false);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[needsSignIn,setNeedsSignIn]=useState(false);
@@ -30,15 +31,15 @@ export default function WorkspaceHome({chooseWorkspace=false}:{chooseWorkspace?:
   }).catch(e=>{if(!active)return;if(e instanceof ApiError&&e.status===401&&window.self===window.top){continueToSignIn();return;}setError(e instanceof Error?e.message:'Workspace unavailable');setNeedsSignIn(e instanceof ApiError&&e.status===401);setLoading(false);});
   return()=>{active=false;};
  },[router,chooseWorkspace]);
- const availableSpaces=spaces.filter(s=>s.workspaceId===workspaceId),space=availableSpaces[0]?.id??'',workspacePages=pages.filter(p=>p.workspaceId===workspaceId);
+ const availableSpaces=spaces.filter(s=>s.workspaceId===workspaceId),space=availableSpaces[0]?.id??'',workspacePages=pages.filter(p=>p.workspaceId===workspaceId),filteredPages=workspacePages.filter(p=>`${p.title} ${p.spaceName}`.toLocaleLowerCase().includes(pageFilter.trim().toLocaleLowerCase()));
  function open(id:string){if(creationDirty&&!confirm('Leave this new-page form? Its title has not been saved.'))return;router.push(`/pages/${encodeURIComponent(id)}`);}
  return <main className="workspace-home"><div className="brand"><HolySheetBrand/>Pages by Aplyd</div>{!loading&&!needsSignIn&&<SignOutButton/>}<section><h1>{chooseWorkspace?'Choose your workspace':'A clear place for your next idea.'}</h1>
  {loading?<p role="status">Opening your workspace…</p>:!needsSignIn&&workspaces.length?<>
-  <label>Workspace<select value={workspaceId} onChange={e=>{if(creationDirty&&!confirm('Leave this new-page form? Its title has not been saved.'))return;setCreationDirty(false);setWorkspaceId(e.target.value);}}>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+  <label>Workspace<select value={workspaceId} onChange={e=>{if(creationDirty&&!confirm('Leave this new-page form? Its title has not been saved.'))return;setCreationDirty(false);setWorkspaceId(e.target.value);setPageFilter('');setPageLimit(30);}}>{workspaces.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
   {workspaces.find(w=>w.id===workspaceId)?.canCreateWorkspace&&<button onClick={()=>{if(creationDirty&&!confirm('Leave this new-page form? Its title has not been saved.'))return;setWorkspaceCreationOpen(true);}}>Create workspace</button>}
   <div className="actions">{chooseWorkspace&&<button onClick={()=>setCreateOpen(true)}>Create page</button>}{space&&<><button onClick={()=>setImportOpen(true)}>Import a document</button>{chooseWorkspace&&<button onClick={()=>setTemplatesOpen(true)}>From template</button>}</>}</div>
   {!chooseWorkspace&&<CreatePage key={workspaceId} presentation="inline" workspaceId={workspaceId} spaces={availableSpaces} onDirty={setCreationDirty} onClose={()=>{}} onTemplates={()=>setTemplatesOpen(true)} onCreated={p=>{setCreationDirty(false);router.push(`/pages/${encodeURIComponent(p.id)}`);}}/>}
-  {workspacePages.length?<nav aria-label="Workspace pages"><ul>{workspacePages.map(p=><li key={p.id}><button onClick={()=>open(p.id)}>{p.title}</button></li>)}</ul></nav>:<p>No accessible pages yet. Create your first private page in this workspace.</p>}
+  {workspacePages.length?<div className="workspace-page-list"><label>Find a page<input aria-label="Find a workspace page" value={pageFilter} onChange={event=>{setPageFilter(event.target.value);setPageLimit(30);}} placeholder="Search by page or space name"/></label>{filteredPages.length?<nav aria-label="Workspace pages"><ul>{filteredPages.slice(0,pageLimit).map(p=><li key={p.id}><button onClick={()=>open(p.id)}><strong>{p.title || 'Untitled'}</strong><small>{p.spaceName}</small></button></li>)}</ul></nav>:<p>No pages match this search.</p>}{filteredPages.length>pageLimit&&<button className="workspace-page-more" onClick={()=>setPageLimit(count=>count+30)}>Show more pages</button>}<small>{Math.min(filteredPages.length,pageLimit)} of {filteredPages.length} accessible pages shown</small></div>:<p>No accessible pages yet. Create your first private page in this workspace.</p>}
   <div className="actions"><a className="snippet-library-link" href={`/workspaces/${encodeURIComponent(workspaceId)}/spaces`}>Spaces</a><a className="snippet-library-link" href={`/workspaces/${encodeURIComponent(workspaceId)}/snippets`}>Snippets</a><button onClick={()=>setTrashOpen(true)}>Trash</button><button onClick={()=>setAccessOpen(true)}>Workspace access</button></div>
  </>:!error&&<p>Your signed-in account needs access to a Pages by Aplyd workspace. Ask its owner to add you.</p>}
  {error&&<p role="alert">{error}</p>}{needsSignIn&&<SignInLink/>}</section>

@@ -1,3 +1,4 @@
+import {choosePageAction} from './page-action-helper';
 import {type APIRequestContext, type Page} from '@playwright/test';
 import {test, expect} from './acceptance-fixtures';
 import {writeFile} from 'node:fs/promises';
@@ -53,7 +54,7 @@ test('literal Unicode boundaries, ranges, wrapping and focus inspection preserve
 for(const width of [320,1440])test(`keyboard details and existing modes remain accessible at ${width}px`,async({page,request,baseURL})=>{
   await page.setViewportSize({width,height:900});await page.emulateMedia({reducedMotion:'reduce'});const data=await fixture(request,baseURL!),id=data.page.id,events=trace(page);await page.goto('/pages/'+id);await ready(page,request,id);await select(page,id+'-code',1);
   const status=page.getByRole('region',{name:'Code position',exact:true});await expect(status).toBeVisible();await status.focus();await expect(status).toBeFocused();expect(await status.getAttribute('aria-describedby')).toBeTruthy();
-  await page.getByLabel('Page options',{exact:true}).click();await page.getByRole('button',{name:'Enter focus mode',exact:true}).click();await expect(status).toBeVisible();await page.getByRole('button',{name:'Exit focus mode',exact:true}).click();
+  await choosePageAction(page,'Enter focus mode');await expect(status).toBeVisible();await page.getByRole('button',{name:'Exit focus mode',exact:true}).click();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);await page.addScriptTag({content:axe.source});const violations=await page.evaluate(async()=>{const engine=(window as unknown as {axe:{run:(root:Element,options:RunOptions)=>Promise<AxeResults>}}).axe;return (await engine.run(document.querySelector('#document-content')!,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa','wcag22aa']}})).violations;});expect(violations).toEqual([]);expect(events.operations).toEqual([]);await page.screenshot({path:test.info().outputPath('code-position-'+width+'.png')});
 });
 
