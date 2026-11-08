@@ -19,7 +19,7 @@ async function mount(props:Partial<Parameters<typeof CreatePage>[0]>={}){
 async function fill(input:HTMLInputElement,value:string){await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));});}
 it('retries the same page intent after a lost response without recreating its new space',async()=>{
  mocks.request.mockResolvedValueOnce({space:{id:'new-space',workspaceId:'w',name:'Launch'}}).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValueOnce({page:{id:'created'}});
- const view=await mount();try{
+ const view=await mount({parent:undefined,spaces:[]});try{
   await fill(view.host.querySelectorAll('input')[0],'Launch brief');await fill(view.host.querySelectorAll('input')[1],'Launch');
   await view.submit();expect(view.created).not.toHaveBeenCalled();expect(view.host.textContent).toContain('Creation is unconfirmed');
   expect(view.host.querySelector('fieldset')!.disabled).toBe(true);await view.submit();
@@ -30,10 +30,11 @@ it('retries the same page intent after a lost response without recreating its ne
 });
 it('allows title correction when space creation was rejected before a page request',async()=>{
  mocks.request.mockRejectedValueOnce(new ApiError('Space unavailable',403,'forbidden'));
- const view=await mount();try{await fill(view.host.querySelectorAll('input')[0],'Retained title');await fill(view.host.querySelectorAll('input')[1],'Launch');await view.submit();expect(view.host.querySelector('fieldset')!.disabled).toBe(false);expect(view.host.querySelector('input')!.value).toBe('Retained title');expect(view.host.textContent).toContain('Space unavailable');expect(mocks.request).toHaveBeenCalledTimes(1);}finally{await view.dispose();}
+ const view=await mount({parent:undefined,spaces:[]});try{await fill(view.host.querySelectorAll('input')[0],'Retained title');await fill(view.host.querySelectorAll('input')[1],'Launch');await view.submit();expect(view.host.querySelector('fieldset')!.disabled).toBe(false);expect(view.host.querySelector('input')!.value).toBe('Retained title');expect(view.host.textContent).toContain('Space unavailable');expect(mocks.request).toHaveBeenCalledTimes(1);}finally{await view.dispose();}
 });
 it('serializes same-tick submissions before React disables the submit button',async()=>{
  let resolve!:(value:unknown)=>void;mocks.request.mockReturnValueOnce(new Promise(r=>{resolve=r;}));const view=await mount();try{
+  await fill(view.host.querySelector('input')!,'Concurrent page');
   await act(async()=>{view.host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));view.host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});expect(mocks.request).toHaveBeenCalledTimes(1);
   await act(async()=>resolve({page:{id:'one-page'}}));expect(view.created).toHaveBeenCalledExactlyOnceWith({id:'one-page'});
  }finally{await view.dispose();}
@@ -49,7 +50,7 @@ it('replays the same space intent before creating the page when the space respon
  }finally{await view.dispose();}
 });
 it('withholds destinations from another workspace in the page dialog',async()=>{
- const view=await mount({spaces:[{id:'s',workspaceId:'w',name:'General'},{id:'foreign',workspaceId:'other',name:'Foreign space'}]});try{expect(view.host.querySelectorAll('option')).toHaveLength(1);expect(view.host.textContent).not.toContain('Foreign space');}finally{await view.dispose();}
+ const view=await mount({spaces:[{id:'s',workspaceId:'w',name:'General'},{id:'s2',workspaceId:'w',name:'Operations'},{id:'foreign',workspaceId:'other',name:'Foreign space'}]});try{expect(view.host.querySelectorAll('option')).toHaveLength(2);expect(view.host.textContent).not.toContain('Foreign space');}finally{await view.dispose();}
 });
 
 it('retains the draft and refuses a legacy fallback when the intent endpoint is unavailable after rollback',async()=>{
@@ -60,4 +61,16 @@ it('retains the draft and refuses a legacy fallback when the intent endpoint is 
 it('keeps an uncertain space operation through server rollback and restoration',async()=>{
  mocks.request.mockRejectedValueOnce(new Error('Committed response lost')).mockRejectedValueOnce(new ApiError('Capability unavailable',404,'not_found')).mockResolvedValueOnce({space:{id:'existing-space',workspaceId:'w',name:'Launch'}}).mockResolvedValueOnce({page:{id:'one-page'}});
  const view=await mount({parent:undefined,spaces:[]});try{await fill(view.host.querySelectorAll('input')[0],'Rollback retry');await fill(view.host.querySelectorAll('input')[1],'Launch');await view.submit();await view.submit();expect(view.host.querySelector('fieldset')!.disabled).toBe(true);expect(view.created).not.toHaveBeenCalled();await view.submit();expect(mocks.request.mock.calls.slice(0,3).map(c=>c[1].body)).toEqual(Array(3).fill(mocks.request.mock.calls[0][1].body));expect(view.created).toHaveBeenCalledExactlyOnceWith({id:'one-page'});}finally{await view.dispose();}
+});
+
+it('creates an in-page subpage with a fixed parent and no space switch',async()=>{
+ mocks.request.mockResolvedValueOnce({page:{id:'child'}});
+ const view=await mount({initialAsChild:true});try{
+  expect(view.host.querySelector('form')?.getAttribute('data-create-mode')).toBe('subpage');
+  expect(view.host.querySelector('select')).toBeNull();
+  expect(view.host.querySelector('input[type=checkbox]')).toBeNull();
+  await fill(view.host.querySelector('input')!,'Child page');await view.submit();
+  expect(JSON.parse(mocks.request.mock.calls[0][1].body)).toMatchObject({title:'Child page',spaceId:'s',parentPageId:'parent'});
+  expect(view.created).toHaveBeenCalledExactlyOnceWith({id:'child'});
+ }finally{await view.dispose();}
 });
