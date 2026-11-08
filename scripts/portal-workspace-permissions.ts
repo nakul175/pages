@@ -1,6 +1,7 @@
 import {Pool} from 'pg';
 import type {Database} from '../lib/database';
 import {portalWorkspacePermission} from '../lib/portal-workspace-permissions';
+import {portalRecordPermission,accountsRecordAuthority} from '../lib/portal-record-permissions';
 import {portalScopePermission} from '../lib/portal-scope-permissions';
 import {portalProvision} from '../lib/portal-provisioning';
 
@@ -26,7 +27,9 @@ try{
  if(creating&&process.env.HS_PORTAL_PROVISIONING_ENABLED!=='1')throw Error();
  const scoped=['scope_inventory','scope_preview','scope_apply'].includes(input?.operation);
  if(scoped&&process.env.HS_PORTAL_SCOPES_ENABLED!=='1')throw Error();
- const result=await (creating?portalProvision:scoped?portalScopePermission:portalWorkspacePermission)(db,config,input);
+ const records=['record_inventory','record_preview','record_apply'].includes(input?.operation);
+ if(records&&(process.env.HS_PORTAL_RECORDS_ENABLED!=='1'||!process.env.HS_PORTAL_RECORDS_SECRET))throw Error();
+ const result=records?await portalRecordPermission(db,{...config,tenant:process.env.HS_PORTAL_TENANT_ID},input,accountsRecordAuthority(config.issuer!,process.env.HS_PORTAL_RECORDS_SECRET!,input.actor_subject,input.actor_uid)):await (creating?portalProvision:scoped?portalScopePermission:portalWorkspacePermission)(db,config,input);
  process.stdout.write(JSON.stringify(result)+'\n');
 }catch{process.stderr.write('Native workspace confirmation unavailable.\n');process.exitCode=1;}
 finally{await pool?.end();clearTimeout(deadline);}
