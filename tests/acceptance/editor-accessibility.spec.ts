@@ -161,6 +161,38 @@ test('space home creates a page in the current space',async({page,request})=>{
  await page.getByText('Organize space',{exact:true}).click();
  await page.getByRole('button',{name:`Create a page in ${space.name}`,exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Create a page',exact:true});await expect(dialog).toBeVisible();
- await expect(dialog.getByRole('combobox',{name:'Space',exact:true})).toHaveValue(space.id);
+ await expect(dialog).toContainText(`In ${space.name}`);
+ await expect(dialog.getByRole('combobox',{name:'Space',exact:true})).toHaveCount(0);
  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+});
+
+test('creating from a page is an explicit subpage with aligned navigation',async({page,request})=>{
+  const parentTitle='Disposable parent '+crypto.randomUUID();
+  const created=await request.post(origin+'/api/pages',{headers:{Origin:origin},data:{title:parentTitle,spaceId:'space-product'}});
+  expect(created.status()).toBe(200);
+  const parentId=(await created.json()).page.id;
+  await page.goto('/pages/'+parentId);
+  const rail=page.getByRole('complementary',{name:'Editor toolbox',exact:true});
+  await rail.getByRole('button',{name:/Subpage/}).click();
+  const dialog=page.getByRole('dialog',{name:'Create a subpage',exact:true});
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Inside');
+  await expect(dialog).toContainText(parentTitle);
+  await expect(dialog.getByLabel('Space',{exact:true})).toHaveCount(0);
+  await expect(dialog.getByLabel('New space',{exact:true})).toHaveCount(0);
+  await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+  const childTitle='Disposable child '+crypto.randomUUID();
+  await dialog.getByRole('textbox',{name:'Subpage name'}).fill(childTitle);
+  await dialog.getByRole('button',{name:'Create subpage',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'Page title',exact:true})).toContainText(childTitle);
+  const parent=page.getByRole('treeitem',{name:new RegExp(parentTitle)});
+  const child=page.getByRole('treeitem',{name:new RegExp(childTitle)});
+  await expect(parent).toBeVisible();
+  await expect(child).toBeVisible();
+  const positions=await page.evaluate(({parentId,childTitle})=>{
+    const parent=document.getElementById(`page-tree-item-${parentId}`)!;
+    const child=Array.from(document.querySelectorAll<HTMLElement>('.page-tree-row')).find(row=>row.textContent?.includes(childTitle))!;
+    return {parent:parent.querySelector('.page-tree-open svg')!.getBoundingClientRect().left,child:child.querySelector('.page-tree-open svg')!.getBoundingClientRect().left};
+  },{parentId,childTitle});
+  expect(positions.child-positions.parent).toBe(14);
 });
