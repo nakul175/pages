@@ -161,7 +161,8 @@ test('space home creates a page in the current space',async({page,request})=>{
  await page.getByText('Organize space',{exact:true}).click();
  await page.getByRole('button',{name:`Create a page in ${space.name}`,exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Create a page',exact:true});await expect(dialog).toBeVisible();
- await expect(dialog.getByRole('combobox',{name:'Space',exact:true})).toHaveValue(space.id);
+ await expect(dialog).toContainText(`In ${space.name}`);
+ await expect(dialog.getByRole('combobox',{name:'Space',exact:true})).toHaveCount(0);
  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
 });
 
