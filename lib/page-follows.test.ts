@@ -46,10 +46,16 @@ const ws = "ws-n45";
 const boltWs = "ws-n45-b";
 let ops = "";
 let boltOps = "";
-const monday = new Date("2026-11-09T03:30:00.000Z");
-const tuesday = new Date("2026-11-10T03:30:00.000Z");
-const early = new Date("2026-11-09T02:30:00.000Z");
-const newYorkMorning = new Date("2026-11-09T14:00:00.000Z");
+// Keep the digest window after the database's real clock_timestamp() writes.
+// The second Monday in next November is after New York has returned to EST.
+const digestYear = new Date().getUTCFullYear() + 1;
+const novemberFirst = new Date(Date.UTC(digestYear, 10, 1));
+const secondMonday = 8 + (8 - novemberFirst.getUTCDay()) % 7;
+const monday = new Date(Date.UTC(digestYear, 10, secondMonday, 3, 30));
+const tuesday = new Date(monday.getTime() + 24 * 60 * 60 * 1000);
+const early = new Date(monday.getTime() - 60 * 60 * 1000);
+const newYorkMorning = new Date(monday.getTime() + 10.5 * 60 * 60 * 1000);
+const digestDate = monday.toISOString().slice(0, 10);
 
 beforeAll(async () => {
   db = await createDatabase(":memory:");
@@ -119,11 +125,11 @@ async function mail(userId: string, kind?: string) {
 
 it("knows when 09:00 has arrived in the follower timezone", () => {
   expect(digestWindow(early, "Asia/Kolkata", "daily")).toBeNull();
-  expect(digestWindow(monday, "Asia/Kolkata", "daily")).toBe("2026-11-09");
+  expect(digestWindow(monday, "Asia/Kolkata", "daily")).toBe(digestDate);
   expect(digestWindow(tuesday, "Asia/Kolkata", "weekly")).toBeNull();
-  expect(digestWindow(monday, "Asia/Kolkata", "weekly")).toBe("2026-11-09");
+  expect(digestWindow(monday, "Asia/Kolkata", "weekly")).toBe(digestDate);
   expect(digestWindow(monday, "America/New_York", "daily")).toBeNull();
-  expect(digestWindow(newYorkMorning, "America/New_York", "daily")).toBe("2026-11-09");
+  expect(digestWindow(newYorkMorning, "America/New_York", "daily")).toBe(digestDate);
 });
 
 it("follows a page or its children and lists that follow in settings", async () => {
@@ -293,7 +299,7 @@ it("includes a changed child when the follow covers the tree", async () => {
   await follow(viewer, only.id, false);
   await save(editor, child.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Child", "Updated"));
   await save(editor, nested.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Nested", "Updated"));
-  await runPageFollowDigests(r, new Date("2026-11-30T03:30:00.000Z"));
+  await runPageFollowDigests(r, new Date(monday.getTime() + 21 * 24 * 60 * 60 * 1000));
   const body = (await mail(viewer.id, "digest")).map(row => row.body).join("\n");
   expect(body).toContain("CHILD_PAGE_TITLE");
   expect(body).not.toContain("NESTED_SECRET_TITLE");

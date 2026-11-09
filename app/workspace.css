@@ -534,3 +534,46 @@ a.variant-switcher-link:link,a.variant-switcher-link:visited,a.variant-diff-link
 .create-page-location { margin:8px 0 0; color:var(--muted); font-size:13px; }
 
 .page-tree .page-tree-row .page-tree-open { width:100%; }
+
+/* Keep the empty-workspace start screen as one clear task, with secondary paths nearby. */
+.workspace-home { max-width:1000px; margin:0 auto; padding:28px 28px 72px; }
+.workspace-home-header { display:flex; align-items:center; justify-content:space-between; gap:20px; padding-bottom:22px; border-bottom:1px solid var(--line); }
+.workspace-home-header .brand { padding:0; font-size:17px; }
+.workspace-home-header .holy-sheet-brand-logo { width:48px; height:48px; flex-basis:48px; }
+.workspace-home > .session-controls { float:none; }
+.workspace-home .workspace-home-content { margin-top:38px; }
+.workspace-home-eyebrow { color:#6b7090; font-size:11px; font-weight:700; letter-spacing:.12em; }
+.workspace-home-intro h1 { margin:10px 0 0; font-size:clamp(32px,4vw,44px); }
+.workspace-home-intro p { max-width:620px; margin:12px 0 0; color:var(--muted); font-size:15px; line-height:1.55; }
+.workspace-home-selector { display:flex; align-items:end; gap:12px; margin:30px 0 18px; }
+.workspace-home-selector label { flex:1; min-width:0; max-width:440px; }
+.workspace-home input,.workspace-home select { color:var(--ink); }
+.workspace-home-grid { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:18px; align-items:start; }
+.workspace-home-create-card,.workspace-home-alternatives { border:1px solid var(--line); border-radius:16px; background:#fff; box-shadow:0 10px 28px #20254a0a; }
+.workspace-home-create-card { padding:28px; }
+.workspace-home-create-card h2,.workspace-home-alternatives h2 { margin:0; font-size:19px; letter-spacing:-.02em; }
+.workspace-home-create-card > p { margin:8px 0 22px; color:var(--muted); font-size:14px; line-height:1.5; }
+.workspace-home-create-card form { max-width:none; gap:16px; }
+.workspace-home-create-card .actions { margin-top:20px; }
+.workspace-home-create-card .actions .primary { min-width:144px; background:var(--navy); }
+.workspace-home-alternatives { display:grid; gap:10px; padding:22px; }
+.workspace-home-alternatives h2 { margin-bottom:8px; }
+.workspace-home .workspace-home-secondary,.workspace-home-alternatives button,.workspace-home-start-actions .workspace-home-secondary { border:1px solid var(--line); background:#fff; color:var(--navy); font-weight:600; }
+.workspace-home-alternatives button { width:100%; text-align:left; }
+.workspace-home .workspace-home-secondary:hover,.workspace-home-alternatives button:hover,.workspace-home-links :is(a,button):hover { background:var(--soft); }
+.workspace-home-start-actions { display:flex; flex-wrap:wrap; gap:10px; margin:20px 0; }
+.workspace-home-empty { margin:26px 0; color:var(--muted); }
+.workspace-home-links { display:flex; flex-wrap:wrap; gap:8px; margin-top:26px; padding-top:22px; border-top:1px solid var(--line); }
+.workspace-home-links :is(a,button) { display:inline-flex; align-items:center; justify-content:center; min-height:44px; margin:0; padding:10px 14px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--navy); font-size:13px; font-weight:600; text-decoration:none; }
+.workspace-home button:disabled { opacity:.55; cursor:not-allowed; }
+@media(max-width:700px) {
+ .workspace-home { padding:18px 16px 48px; }
+ .workspace-home-header { padding-bottom:16px; }
+ .workspace-home .workspace-home-content { margin-top:28px; }
+ .workspace-home-selector { align-items:stretch; flex-direction:column; margin-top:24px; }
+ .workspace-home-selector label,.workspace-home-selector button { width:100%; max-width:none; }
+ .workspace-home-grid { grid-template-columns:minmax(0,1fr); }
+ .workspace-home-create-card,.workspace-home-alternatives { padding:20px; }
+ .workspace-home-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .workspace-home-links :is(a,button) { text-align:center; }
+}

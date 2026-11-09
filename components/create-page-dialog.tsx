@@ -4,7 +4,7 @@ import type {Page,Space} from "../lib/types";
 import {Dialog} from "./editor/rich-editor";
 import {ApiError,requestJson} from "./editor/use-document-session";
 
-export default function CreatePage({spaces:allSpaces,parent,workspaceId,onClose,onCreated,onTemplates,onDirty,presentation='dialog',initialAsChild=false}:{onTemplates:()=>void;onDirty?:(dirty:boolean)=>void;presentation?:'dialog'|'inline';spaces:Space[];parent?:Page;workspaceId:string;onClose:()=>void;onCreated:(p:Page)=>void;initialAsChild?:boolean}){
+export default function CreatePage({spaces:allSpaces,parent,workspaceId,onClose,onCreated,onTemplates,onDirty,presentation='dialog',initialAsChild=false,showTemplateAction=true}:{onTemplates:()=>void;onDirty?:(dirty:boolean)=>void;presentation?:'dialog'|'inline';spaces:Space[];parent?:Page;workspaceId:string;onClose:()=>void;onCreated:(p:Page)=>void;initialAsChild?:boolean;showTemplateAction?:boolean}){
   const spaces=allSpaces.filter(space=>space.workspaceId===workspaceId);
   const [name,setName]=useState(''),[spaceId,setSpaceId]=useState(parent?.spaceId??spaces[0]?.id??''),[newSpace,setNewSpace]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const running=useRef(false),attempt=useRef<{title:string;parentPageId:string|null;destination:string;spaceBody:string|null;pageBody:string|null}|null>(null);
@@ -36,7 +36,7 @@ export default function CreatePage({spaces:allSpaces,parent,workspaceId,onClose,
   const subpage=initialAsChild&&!!parent;
   const needsSpace=!spaces.length;
   const form=<>
-    {!subpage&&<button type="button" className="create-page-template-button" disabled={busy||unconfirmed||!spaces.length} onClick={templates}>From template</button>}
+    {!subpage&&showTemplateAction&&<button type="button" className="create-page-template-button" disabled={busy||unconfirmed||!spaces.length} onClick={templates}>From template</button>}
     <form className="create-page-form" data-create-mode={subpage?'subpage':'page'} onSubmit={submit}>
       <fieldset style={{border:0,padding:0,margin:0,minWidth:0}} disabled={busy||unconfirmed}>
         <label>{subpage?'Subpage name':'Page name'}<input autoFocus maxLength={240} value={name} onChange={e=>setName(e.target.value)} placeholder="Untitled" required/></label>
