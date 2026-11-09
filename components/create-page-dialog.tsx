@@ -4,10 +4,9 @@ import type {Page,Space} from "../lib/types";
 import {Dialog} from "./editor/rich-editor";
 import {ApiError,requestJson} from "./editor/use-document-session";
 
-export default function CreatePage({spaces:allSpaces,parent,workspaceId,onClose,onCreated,onTemplates,onDirty,presentation='dialog',initialAsChild=false}:{onTemplates:()=>void;onDirty?:(dirty:boolean)=>void;presentation?:'dialog'|'inline';spaces:Space[];parent?:Page;workspaceId:string;onClose:()=>void;onCreated:(p:Page)=>void;initialAsChild?:boolean}){
+export default function CreatePage({spaces:allSpaces,parent,workspaceId,onClose,onCreated,onTemplates,onDirty,presentation='dialog',initialAsChild=false,showTemplateAction=true}:{onTemplates:()=>void;onDirty?:(dirty:boolean)=>void;presentation?:'dialog'|'inline';spaces:Space[];parent?:Page;workspaceId:string;onClose:()=>void;onCreated:(p:Page)=>void;initialAsChild?:boolean;showTemplateAction?:boolean}){
   const spaces=allSpaces.filter(space=>space.workspaceId===workspaceId);
-  const [name,setName]=useState(''),[spaceId,setSpaceId]=useState(parent?.spaceId??spaces[0]?.id??''),[newSpace,setNewSpace]=useState(''),[asChild,setAsChild]=useState(initialAsChild),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  useEffect(()=>{setAsChild(initialAsChild);},[initialAsChild]);
+  const [name,setName]=useState(''),[spaceId,setSpaceId]=useState(parent?.spaceId??spaces[0]?.id??''),[newSpace,setNewSpace]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const running=useRef(false),attempt=useRef<{title:string;parentPageId:string|null;destination:string;spaceBody:string|null;pageBody:string|null}|null>(null);
   const [unconfirmed,setUnconfirmed]=useState(false);
   useEffect(()=>{onDirty?.(!!name.trim()||!!newSpace.trim()||unconfirmed);},[name,newSpace,unconfirmed,onDirty]);
@@ -17,7 +16,7 @@ export default function CreatePage({spaces:allSpaces,parent,workspaceId,onClose,
     e.preventDefault();if(running.current)return;running.current=true;setBusy(true);setError('');
     try{
       const retrying=!!attempt.current;
-      if(!attempt.current)attempt.current={title:name,parentPageId:asChild&&parent?parent.id:null,destination:spaceId,spaceBody:newSpace.trim()?JSON.stringify({name:newSpace,workspaceId,operationId:crypto.randomUUID()}):null,pageBody:null};
+      if(!attempt.current)attempt.current={title:name,parentPageId:initialAsChild&&parent?parent.id:null,destination:spaceId,spaceBody:newSpace.trim()?JSON.stringify({name:newSpace,workspaceId,operationId:crypto.randomUUID()}):null,pageBody:null};
       const intent=attempt.current;
       if(intent.spaceBody){
         try{
@@ -34,6 +33,22 @@ export default function CreatePage({spaces:allSpaces,parent,workspaceId,onClose,
     }catch(e){setUnconfirmed(!!attempt.current);setError(attempt.current?'Creation is unconfirmed. Retry to confirm the same space and page.':e instanceof Error?e.message:'Page could not be created.');}
     finally{running.current=false;setBusy(false);}
   }
-  const form=<><button disabled={busy||unconfirmed||!spaces.length} onClick={templates}>From template</button><form className="create-page-form" data-create-mode={initialAsChild?'subpage':'page'} onSubmit={submit}><fieldset style={{border:0,padding:0,margin:0,minWidth:0}} disabled={busy||unconfirmed}><label>Title<input maxLength={240} value={name} onChange={e=>setName(e.target.value)} placeholder="Untitled"/></label>{!!spaces.length&&<label>Space<select value={spaceId} onChange={e=>{setSpaceId(e.target.value);setAsChild(false);}}>{spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}<div className="or">{spaces.length?'or create a new space':'Create a space for your first page'}</div><label>New space<input maxLength={80} value={newSpace} onChange={e=>{setNewSpace(e.target.value);setAsChild(false);}} placeholder="e.g. Operations"/></label>{parent&&<label className="check"><input type="checkbox" disabled={spaceId!==parent?.spaceId||!!newSpace.trim()} checked={asChild} onChange={e=>setAsChild(e.target.checked)}/>Create under “{parent.title}”</label>}</fieldset>{error&&<p role="alert" className="form-error">{error}</p>}<div className="actions">{presentation==='dialog'&&<button type="button" onClick={close}>Cancel</button>}<button className="primary" disabled={busy||(!spaceId&&!newSpace.trim())}>{busy?'Creating…':unconfirmed?'Retry confirmation':'Create page'}</button></div></form></>;
-  return presentation==='inline'?form:<Dialog title="Create a page" onClose={close}>{form}</Dialog>;
+  const subpage=initialAsChild&&!!parent;
+  const needsSpace=!spaces.length;
+  const form=<>
+    {!subpage&&showTemplateAction&&<button type="button" className="create-page-template-button" disabled={busy||unconfirmed||!spaces.length} onClick={templates}>From template</button>}
+    <form className="create-page-form" data-create-mode={subpage?'subpage':'page'} onSubmit={submit}>
+      <fieldset style={{border:0,padding:0,margin:0,minWidth:0}} disabled={busy||unconfirmed}>
+        <label>{subpage?'Subpage name':'Page name'}<input autoFocus maxLength={240} value={name} onChange={e=>setName(e.target.value)} placeholder="Untitled" required/></label>
+        {subpage?<p className="create-page-location">Inside <strong>{parent.title}</strong> · {spaces.find(space=>space.id===parent.spaceId)?.name??'Current space'}</p>:<>
+          {spaces.length>1&&<label>Space<select value={spaceId} onChange={e=>setSpaceId(e.target.value)}>{spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
+          {spaces.length===1&&<p className="create-page-location">In {spaces[0].name}</p>}
+          {needsSpace&&<label>New space<input maxLength={80} value={newSpace} onChange={e=>setNewSpace(e.target.value)} placeholder="e.g. Operations" required/></label>}
+        </>}
+      </fieldset>
+      {error&&<p role="alert" className="form-error">{error}</p>}
+      <div className="actions">{presentation==='dialog'&&<button type="button" onClick={close}>Cancel</button>}<button className="primary" disabled={busy||!name.trim()||(!spaceId&&!newSpace.trim())}>{busy?'Creating…':unconfirmed?'Retry confirmation':subpage?'Create subpage':'Create page'}</button></div>
+    </form>
+  </>;
+  return presentation==='inline'?form:<Dialog title={subpage?'Create a subpage':'Create a page'} onClose={close}>{form}</Dialog>;
 }

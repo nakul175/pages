@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ApiError, requestJson } from "./editor/use-document-session";
 import type { SpaceReviewDashboard } from "../lib/page-review";
 import { OWNER_NEEDED, reviewFilters } from "../lib/page-review-copy";
+import type { Page } from "../lib/types";
 
 export function SpaceReviewTable({ dashboard }: { dashboard: SpaceReviewDashboard }) {
   return <div className="space-reviews">
@@ -31,6 +32,23 @@ export default function SpaceReviews({ workspaceId, spaceId }: { workspaceId: st
   const [dashboard, setDashboard] = useState<SpaceReviewDashboard | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pageChoices, setPageChoices] = useState<Page[] | null>(null);
+  const [chooseOpen, setChooseOpen] = useState(false);
+  const [choiceError, setChoiceError] = useState("");
+  const [choiceQuery, setChoiceQuery] = useState("");
+  async function loadPageChoices() {
+    try {
+      const result = await requestJson<{pages: Page[]}>("/api/pages");
+      setPageChoices(result.pages.filter(page => page.workspaceId === workspaceId && page.spaceId === spaceId).sort((a,b) => b.updatedAt.localeCompare(a.updatedAt)));
+      setChoiceError("");
+    } catch {
+      setChoiceError("Pages could not be loaded. Try again.");
+    }
+  }
+  function choosePage() {
+    setChooseOpen(current => !current);
+    if (pageChoices === null) void loadPageChoices();
+  }
   const load = async (next = filter) => {
     const data = await requestJson<SpaceReviewDashboard>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/spaces/${encodeURIComponent(spaceId)}/reviews?filter=${encodeURIComponent(next)}`);
     setDashboard(data);
@@ -58,6 +76,7 @@ export default function SpaceReviews({ workspaceId, spaceId }: { workspaceId: st
   }
   const csv = `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/spaces/${encodeURIComponent(spaceId)}/reviews?export=csv&filter=${encodeURIComponent(filter)}`;
   const empty = dashboard ? isEmptyReviewDashboard(dashboard) : false;
+  const visibleChoices = pageChoices?.filter(page => (page.title || "Untitled").toLocaleLowerCase().includes(choiceQuery.trim().toLocaleLowerCase())).slice(0, choiceQuery ? 50 : 12) ?? [];
   return <WorkspaceSection workspaceId={workspaceId} section="Spaces" spaces={dashboard ? [{id:spaceId,name:dashboard.spaceName}] : []}><main className="space-reviews-page"><a className="skip-link" href="#space-reviews">Skip to reviews</a><p><a href="/">Pages by Aplyd</a> / <a href={`/workspaces/${encodeURIComponent(workspaceId)}/spaces`}>Spaces</a> / Page reviews</p>
     {error && <p role="alert">{error}</p>}
     {!dashboard && !error && <p role="status">Opening reviews…</p>}
@@ -67,7 +86,8 @@ export default function SpaceReviews({ workspaceId, spaceId }: { workspaceId: st
         <span className="reviews-empty-icon" aria-hidden="true">✓</span>
         <h2 id="reviews-empty-title">No page reviews yet</h2>
         <p>Set a date for the page owner to check that the content is still accurate.</p>
-        <a className="reviews-empty-cta" href={`/workspaces/${encodeURIComponent(workspaceId)}/spaces/${encodeURIComponent(spaceId)}`}>Choose a page to review</a>
+        <button type="button" className="reviews-empty-cta" aria-expanded={chooseOpen} onClick={choosePage}>Choose a page to review</button>
+        {chooseOpen && <div className="review-page-picker" aria-label="Choose a page">{choiceError && <p role="alert">{choiceError} <button type="button" onClick={() => void loadPageChoices()}>Retry</button></p>}{!choiceError && pageChoices === null && <p role="status">Loading pages…</p>}{!choiceError && pageChoices?.length === 0 && <p>No accessible pages in this space yet.</p>}{!choiceError && !!pageChoices?.length && <><label>Find a page <input type="search" value={choiceQuery} onChange={event => setChoiceQuery(event.target.value)} placeholder="Search by title" /></label><ul>{visibleChoices.map(page => <li key={page.id}><a href={`/pages/${encodeURIComponent(page.id)}`}>{page.title || "Untitled"}</a></li>)}</ul>{!visibleChoices.length && <p>No matching pages.</p>}{!choiceQuery && pageChoices.length > visibleChoices.length && <small>Showing the 12 most recently updated pages. Search to find another page.</small>}</>}</div>}
         <small>You can add a review from a page’s ••• menu.</small>
       </section> : <><div className="review-toolbar">
         <label>Filter <select aria-label="Review filter" value={filter} onChange={event => setFilter(event.target.value)}>{reviewFilters.map(item => <option key={item} value={item}>{item === "open" ? "Due, overdue, and expired" : item[0].toUpperCase() + item.slice(1)}</option>)}</select></label>

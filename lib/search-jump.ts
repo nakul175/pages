@@ -141,8 +141,9 @@ async function quickActions(tx: Sql, actorId: string, workspaceId: string, role:
   const spaces = await tx.query<{ id: string; name: string }>("SELECT id, name FROM hs_spaces WHERE workspace_id=$1 ORDER BY name, id", [workspaceId]);
   const actions: SearchQuickAction[] = [];
   if (role !== "observer") for (const space of spaces.rows) actions.push({ id: `new-page:${space.id}`, label: spaces.rows.length === 1 ? "New page" : `New page in ${space.name}`, kind: "new-page", spaceId: space.id });
-  for (const collection of await creatableCollections(tx, actorId, workspaceId)) actions.push({ id: `new-record:${collection.id}`, label: "New record", kind: "new-record", collection: collection.id });
-  for (const space of spaces.rows) actions.push({ id: `home:${space.id}`, label: "Go to space home", kind: "space-home", href: `/workspaces/${encodeURIComponent(workspaceId)}/spaces/${encodeURIComponent(space.id)}`, spaceId: space.id });
+  const collections = await creatableCollections(tx, actorId, workspaceId);
+  for (const collection of collections) actions.push({ id: `new-record:${collection.id}`, label: collections.length === 1 ? "New record" : `New record in ${collection.name}`, kind: "new-record", collection: collection.id });
+  for (const space of spaces.rows) actions.push({ id: `home:${space.id}`, label: `Go to ${space.name} home`, kind: "space-home", href: `/workspaces/${encodeURIComponent(workspaceId)}/spaces/${encodeURIComponent(space.id)}`, spaceId: space.id });
   return actions;
 }
 

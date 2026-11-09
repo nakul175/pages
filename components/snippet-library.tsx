@@ -1,6 +1,6 @@
 "use client";
 import { WorkspaceSection } from "./workspace-section";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { requestJson } from "./editor/use-document-session";
 
 type Space = { id: string; name: string; tier: string; canManage: boolean; canApprove: boolean };
@@ -13,6 +13,7 @@ type Preview = { titles: string[]; hiddenCount: number; confirm: string };
 const paragraph = (text: string) => ({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
 
 export default function SnippetLibrary({ workspaceId, initialSnippetId }: { workspaceId: string; initialSnippetId?: string }) {
+  const newSnippet = useRef<HTMLDetailsElement>(null);
   const base = `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/snippets`;
   const [library, setLibrary] = useState<Library | null>(null);
   const [selected, setSelected] = useState(initialSnippetId ?? "");
@@ -82,7 +83,7 @@ export default function SnippetLibrary({ workspaceId, initialSnippetId }: { work
     <p>Approved wording can be inserted into pages. Drafts stay in this library until an approver accepts them.</p>
     {error && <p role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
-    {manageable.length > 0 && <details><summary>New snippet</summary><form onSubmit={event => { event.preventDefault(); void run(async () => { await post(base, { action: "create", operationId: crypto.randomUUID(), spaceId, title, content: paragraph(body) }); setTitle(""); setBody(""); await loadList(); setNotice("Draft snippet created."); }); }}>
+    {manageable.length > 0 && <details ref={newSnippet}><summary>New snippet</summary><form onSubmit={event => { event.preventDefault(); void run(async () => { await post(base, { action: "create", operationId: crypto.randomUUID(), spaceId, title, content: paragraph(body) }); setTitle(""); setBody(""); await loadList(); setNotice("Draft snippet created."); }); }}>
 
       <label>Space<select aria-label="Snippet space" value={spaceId} onChange={event => setSpaceId(event.target.value)}>{manageable.map(space => <option key={space.id} value={space.id}>{space.name}</option>)}</select></label>
       <label>Title<input aria-label="Snippet title" value={title} onChange={event => setTitle(event.target.value)} required maxLength={120} /></label>
@@ -90,7 +91,7 @@ export default function SnippetLibrary({ workspaceId, initialSnippetId }: { work
       <button disabled={busy}>Create draft</button>
     </form></details>}
     {!library && !error && <p role="status">Loading snippets…</p>}
-    {library && !library.snippets.length && <section className="snippet-empty"><h2>No snippets yet</h2><p>Your team’s reusable wording will appear here.</p></section>}
+    {library && !library.snippets.length && <section className="snippet-empty"><h2>No snippets yet</h2><p>Your team’s reusable wording will appear here.</p>{manageable.length > 0 && <button type="button" onClick={() => { if (!newSnippet.current) return; newSnippet.current.open = true; newSnippet.current.scrollIntoView({ block: "start", behavior: "smooth" }); newSnippet.current.querySelector<HTMLInputElement>('input[aria-label="Snippet title"]')?.focus(); }}>Create a snippet</button>}</section>}
     {!!library?.snippets.length && <ul aria-label="Snippets">{library.snippets.map(item => <li key={item.id}><button type="button" aria-current={item.id === selected ? "true" : undefined} onClick={() => { setSelected(item.id); void run(() => loadDetail(item.id).then(() => undefined)); }}>{item.title}</button> <span>{item.state}{item.deleted ? " · deleted" : ""}</span></li>)}</ul>}
     {detail && <section aria-labelledby="snippet-detail-title">
       <h2 id="snippet-detail-title">{detail.title}</h2>

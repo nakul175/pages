@@ -15,8 +15,8 @@ function Highlight({text,query}:{text:string;query:string}){
  const pattern=new RegExp('('+needles.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')','giu');
  return <>{text.split(pattern).map((part,i)=>i%2?<mark key={i}>{part}</mark>:part)}</>;
 }
-export function SearchExperience({spaces,workspaceId,workspaceName,onOpen,onOpenPage,onClose,resultsId,commandBar=false,editing=false,pageId,onOpenTab,onJump,onCreated}:{spaces:Space[];workspaceId:string;workspaceName:string;onOpen:(result:SearchResult)=>void;onOpenPage?:()=>void;onClose?:()=>void;resultsId?:string;commandBar?:boolean;editing?:boolean;pageId?:string;onOpenTab?:(result:SearchResult)=>void;onJump?:(href:string)=>void;onCreated?:(href:string)=>void}){
- const [query,setQuery]=useState(''),[spaceId,setSpaceId]=useState(''),[language,setLanguage]=useState(''),[kinds,setKinds]=useState<SearchKind[]>([...searchKinds]),[collection,setCollection]=useState(''),[owner,setOwner]=useState(''),[from,setFrom]=useState(''),[to,setTo]=useState(''),[includeArchived,setIncludeArchived]=useState(false),[results,setResults]=useState<SearchResult[]>([]),[selected,setSelected]=useState(0),[cursor,setCursor]=useState<string|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[retry,setRetry]=useState(0);
+export function SearchExperience({spaces,workspaceId,workspaceName,onOpen,onOpenPage,onClose,resultsId,commandBar=false,editing=false,pageId,onOpenTab,onJump,onCreated,initialQuery=''}:{spaces:Space[];workspaceId:string;workspaceName:string;onOpen:(result:SearchResult)=>void;onOpenPage?:(query:string)=>void;onClose?:()=>void;resultsId?:string;commandBar?:boolean;editing?:boolean;pageId?:string;onOpenTab?:(result:SearchResult)=>void;onJump?:(href:string)=>void;onCreated?:(href:string)=>void;initialQuery?:string}){
+ const [query,setQuery]=useState(initialQuery),[spaceId,setSpaceId]=useState(''),[language,setLanguage]=useState(''),[kinds,setKinds]=useState<SearchKind[]>([...searchKinds]),[collection,setCollection]=useState(''),[owner,setOwner]=useState(''),[from,setFrom]=useState(''),[to,setTo]=useState(''),[includeArchived,setIncludeArchived]=useState(false),[results,setResults]=useState<SearchResult[]>([]),[selected,setSelected]=useState(0),[cursor,setCursor]=useState<string|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[retry,setRetry]=useState(0),[filtersOpen,setFiltersOpen]=useState(false);
  const generation=useRef(0),request=useRef<AbortController|null>(null),buttons=useRef<(HTMLButtonElement|null)[]>([]),input=useRef<HTMLInputElement>(null),generatedId=useId(),listId=resultsId??generatedId,commandRef=useRef<((action:SearchActionId,result:SearchResult)=>void)|null>(null);
  const chosen=searchKinds.filter(kind=>kinds.includes(kind));
  const fetchResults=async(next:string|null,version:number)=>{
@@ -47,7 +47,8 @@ export function SearchExperience({spaces,workspaceId,workspaceName,onOpen,onOpen
    <select aria-label="Filter by space" value={spaceId} onChange={e=>setSpaceId(e.target.value)}><option value="">All accessible spaces</option>{spaces.filter(s=>s.workspaceId===workspaceId).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
    <select aria-label="Language" value={language} onChange={e=>setLanguage(e.target.value)}><option value="">All languages</option>{languageChoices.map(item=><option key={item.tag} value={item.tag}>{item.name}</option>)}</select>
   </div>
-  <div className="hs-search-filters">
+  <button type="button" className="hs-search-filter-toggle" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(open=>!open)}>{filtersOpen?"Hide filters":"Show filters"}</button>
+  <div className={`hs-search-filters ${filtersOpen?"is-open":""}`}>
    <fieldset><legend>Result types</legend><div className="hs-search-types" role="group" aria-label="Result types">{searchKinds.map(kind=><label key={kind}><input type="checkbox" checked={kinds.includes(kind)} onChange={e=>setKinds(current=>e.target.checked?[...current,kind]:current.filter(item=>item!==kind))}/>{labels[kind]}</label>)}</div></fieldset>
    <label>Collection<input aria-label="Filter by collection" maxLength={100} value={collection} onChange={e=>setCollection(e.target.value)} placeholder="All collections"/></label>
    <label>Owner<input aria-label="Filter by owner" maxLength={200} value={owner} onChange={e=>setOwner(e.target.value)} placeholder="Any owner"/></label>
@@ -63,9 +64,9 @@ export function SearchExperience({spaces,workspaceId,workspaceName,onOpen,onOpen
    {commandBar&&<SearchCommandResults workspaceId={workspaceId} pageId={pageId} editing={editing} query={query} results={results} error={error} listId={listId} selected={selected} onSelect={setSelected} onOpen={open} onOpenTab={onOpenTab} onJump={onJump} onCreated={onCreated} onClose={onClose??(()=>undefined)} commandRef={commandRef}/>}
    {!error&&cursor&&<button disabled={busy} onClick={()=>void fetchResults(cursor,generation.current)}>Load more</button>}
   </div>
-  {onOpenPage&&<p><button type="button" onClick={onOpenPage}>Open search page</button></p>}
+  {onOpenPage&&<p><button type="button" onClick={()=>onOpenPage(query)}>Open search page</button></p>}
  </>;
 }
-export default function SearchDialog({spaces,workspaceId,workspaceName,onClose,onOpen,onOpenPage,commandBar,editing,pageId,onOpenTab,onJump,onCreated}:{spaces:Space[];workspaceId:string;workspaceName:string;onClose:()=>void;onOpen:(result:SearchResult)=>void;onOpenPage?:()=>void;commandBar?:boolean;editing?:boolean;pageId?:string;onOpenTab?:(result:SearchResult)=>void;onJump?:(href:string)=>void;onCreated?:(href:string)=>void}){
+export default function SearchDialog({spaces,workspaceId,workspaceName,onClose,onOpen,onOpenPage,commandBar,editing,pageId,onOpenTab,onJump,onCreated}:{spaces:Space[];workspaceId:string;workspaceName:string;onClose:()=>void;onOpen:(result:SearchResult)=>void;onOpenPage?:(query:string)=>void;commandBar?:boolean;editing?:boolean;pageId?:string;onOpenTab?:(result:SearchResult)=>void;onJump?:(href:string)=>void;onCreated?:(href:string)=>void}){
  return <Dialog title="Search" onClose={onClose}><SearchExperience spaces={spaces} workspaceId={workspaceId} workspaceName={workspaceName} onOpen={onOpen} onOpenPage={onOpenPage} onClose={onClose} commandBar={commandBar} editing={editing} pageId={pageId} onOpenTab={onOpenTab} onJump={onJump} onCreated={onCreated}/></Dialog>;
 }

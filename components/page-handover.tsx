@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, requestJson } from "./editor/use-document-session";
+import { WorkspaceSection } from "./workspace-section";
 
 type Member = { id: string; name: string; role: string; active: boolean };
 type Access = { canManage: boolean; members: Member[] };
@@ -22,14 +23,15 @@ function Choice({ row, value, onChange }: { row: PageRow; value: Decision; onCha
 }
 
 function Rows({ rows, decisions, onDecision }: { rows: PageRow[]; decisions: Record<string, Decision>; onDecision: (pageId: string, decision: Decision) => void }) {
+  const [showAll, setShowAll] = useState(false);
   if (!rows.length) return <p>None</p>;
-  return <table>
+  return <><div className="handover-table-scroll"><table>
     <thead><tr><th>Page</th><th>Recipient access</th></tr></thead>
-    <tbody>{rows.map(row => <tr key={row.pageId}>
+    <tbody>{(showAll ? rows : rows.slice(0, 20)).map(row => <tr key={row.pageId}>
       <td>{row.title}</td>
       <td>{row.recipientCanEdit === undefined ? "No active owner" : <Choice row={row} value={decisions[row.pageId] ?? (row.recipientCanEdit ? "transfer" as Decision : "skip")} onChange={decision => onDecision(row.pageId, decision)} />}</td>
     </tr>)}</tbody>
-  </table>;
+  </table></div>{rows.length > 20 && <button type="button" onClick={() => setShowAll(value => !value)}>{showAll ? "Show first 20" : `Show all ${rows.length} pages`}</button>}</>;
 }
 
 export default function PageHandover({ workspaceId }: { workspaceId: string }) {
@@ -60,8 +62,8 @@ export default function PageHandover({ workspaceId }: { workspaceId: string }) {
       setReport(ownerless);
       const active = members.members.filter(member => member.active && member.role !== "observer");
       setFromUserId(members.members[0]?.id ?? "");
-      setToUserId(active[0]?.id ?? "");
-      setAssignTo(active[0]?.id ?? "");
+      setToUserId("");
+      setAssignTo("");
     }).catch(reason => {
       if (!controller.signal.aborted) setError(reason instanceof ApiError ? reason.message : "Workspace is restricted or unavailable");
     });
@@ -169,7 +171,8 @@ export default function PageHandover({ workspaceId }: { workspaceId: string }) {
 
   const members = access?.members ?? [];
   const recipients = members.filter(member => member.active && member.role !== "observer");
-  return <main className="page-handover-page">
+  const previewDecisions = preview ? chosen(includeTrashed ? [...preview.pages, ...preview.trashed] : preview.pages, decisions) : [];
+  return <WorkspaceSection workspaceId={workspaceId} section="Spaces"><main className="page-handover-page">
     <a className="skip-link" href="#page-handover">Skip to page handover</a>
     <p><a href="/">Pages by Aplyd</a> / Page handover</p>
     <h1>Page handover</h1>
@@ -183,17 +186,21 @@ export default function PageHandover({ workspaceId }: { workspaceId: string }) {
           {members.map(member => <option key={member.id} value={member.id}>{member.name}{member.active ? "" : " (inactive)"}</option>)}
         </select></label>
         <label>To <select aria-label="Handover to" value={toUserId} onChange={event => { setToUserId(event.target.value); setPreview(null); }}>
+          <option value="">Choose a recipient</option>
           {recipients.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
         </select></label>
-        <button type="submit" disabled={busy || !fromUserId || !toUserId}>Preview handover</button>
+        <button type="submit" disabled={busy || !fromUserId || !toUserId || fromUserId === toUserId}>Preview handover</button>
+        {fromUserId === toUserId && <p role="status">Choose a different recipient.</p>}
       </form>
       {preview && <>
+        <p role="status">Review {preview.pages.length} active page{preview.pages.length === 1 ? "" : "s"} and {preview.trashed.length} trashed page{preview.trashed.length === 1 ? "" : "s"}. Only pages included below will be handed over.</p>
         <h3>Pages</h3>
         <Rows rows={preview.pages} decisions={decisions} onDecision={(pageId, decision) => setDecisions(current => ({ ...current, [pageId]: decision }))} />
         <h3>Trash</h3>
         <p>Trashed pages are listed separately and move only if you include them.</p>
         <Rows rows={preview.trashed} decisions={decisions} onDecision={(pageId, decision) => setDecisions(current => ({ ...current, [pageId]: decision }))} />
         <label><input type="checkbox" checked={includeTrashed} onChange={event => setIncludeTrashed(event.target.checked)} /> Include trash</label>
+        <p role="status">Ready: {previewDecisions.filter(row => row.decision === "transfer").length} transfer, {previewDecisions.filter(row => row.decision === "grant").length} grant edit, {previewDecisions.filter(row => row.decision === "skip").length} skip.</p>
         <button type="button" disabled={busy} onClick={() => void runHandover()}>Start handover</button>
       </>}
       <section aria-label="Pages without an active owner">
@@ -205,6 +212,7 @@ export default function PageHandover({ workspaceId }: { workspaceId: string }) {
           <h3>Trash</h3>
           <Rows rows={report.trashed} decisions={{}} onDecision={() => undefined} />
           <label>Assign to <select aria-label="Assign owner" value={assignTo} onChange={event => { setAssignTo(event.target.value); setAssignPreview(null); }}>
+            <option value="">Choose an owner</option>
             {recipients.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
           </select></label>
           <button type="button" disabled={busy || !assignTo} onClick={() => void checkOwnerless()}>Check access</button>
@@ -219,5 +227,5 @@ export default function PageHandover({ workspaceId }: { workspaceId: string }) {
       </section>
       {job && <p role="status">Handover {job.state}. Transferred {job.counts.transferred}. Granted {job.counts.granted}. Skipped {job.counts.skipped}. Failed {job.counts.failed}. Pending {job.counts.pending}. Recorded {job.atIst}.</p>}
     </div>}
-  </main>;
+  </main></WorkspaceSection>;
 }

@@ -139,15 +139,15 @@ it("shows at most five permitted recents and quick actions, then drops a revoked
   expect(open.recents.map(item => item.id)).not.toContain(pages[0].id);
   expect(open.recents[0].id).toBe(pages[5].id);
   expect(open.quickActions.some(item => item.label.startsWith("New page"))).toBe(true);
-  expect(open.quickActions.some(item => item.label === "New record")).toBe(true);
-  expect(open.quickActions.some(item => item.label === "Go to space home")).toBe(true);
+  expect(open.quickActions.some(item => item.label.startsWith("New record"))).toBe(true);
+  expect(open.quickActions.some(item => item.label === "Go to Product home")).toBe(true);
   await db.query("DELETE FROM hs_grants WHERE page_id=$1 AND subject=$2", [pages[5].id, editor.id]);
   const revoked = await searchCommandPalette(r, editor, ws, {});
   expect(revoked.recents.map(item => item.id)).not.toContain(pages[5].id);
   expect(JSON.stringify(revoked)).not.toContain("Opened 5");
   const viewer = await searchCommandPalette(r, observer, ws, {});
   expect(viewer.quickActions.some(item => item.kind === "new-page" || item.kind === "new-record")).toBe(false);
-  expect(viewer.quickActions.some(item => item.label === "Go to space home")).toBe(true);
+  expect(viewer.quickActions.some(item => item.label === "Go to Product home")).toBe(true);
 });
 
 it("rechecks permission, revoke, trash, and cross-tenant inserts without leaking metadata", async () => {
