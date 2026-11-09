@@ -1,6 +1,8 @@
 import {z} from 'zod';
 import {DocumentError,stableStringify} from './document';
 import {createHash} from 'node:crypto';
+import {recordValueEmpty} from './record-value';
+export {recordValueEmpty} from './record-value';
 export const standardCollections=['organisations','accounts','contacts','employees','contracts'] as const;
 export type StandardCollection=typeof standardCollections[number];
 export const recordCapabilities=['view','create','edit','link','import','export','bulk','archive','delete','restore','merge','schema','manage-views','history','restore-values','manage-templates','manage-permissions','manage-forms','manage-reviews','review','manage-import-profiles','manage-external-ids','manage-integration-health','manage-effective-dates','correct-effective','manage-contract-changes','manage-staff-lifecycle'] as const;
@@ -10,7 +12,6 @@ export const recordGrantCapabilities=['view','edit','link','import','export','bu
 export type RecordGrantCapability=typeof recordGrantCapabilities[number];
 export type FieldKind='text'|'long-text'|'number'|'currency'|'date'|'boolean'|'single-select'|'multi-select'|'email'|'phone'|'url'|'attachment'|'record';
 export type RecordField={key:string;label:string;kind:FieldKind;required:boolean;defaultValue?:unknown;choices:string[];referenceListId?:string;referenceList?:{id:string;version:number;items:{id:string;code:string;label:string;deprecated:boolean;translations:Record<string,string>}[]};sensitive:boolean;unique:boolean;deprecated:boolean;core:boolean;version:number};
-export function recordValueEmpty(value:unknown){return value===undefined||value===null||typeof value==='string'&&!value.trim()||Array.isArray(value)&&!value.length;}
 // Exact ECMAScript trim set, for schema preview/unique SQL to share input semantics.
 export const recordWhitespaceSql="U&'\\0009\\000A\\000B\\000C\\000D\\0020\\00A0\\1680\\2000\\2001\\2002\\2003\\2004\\2005\\2006\\2007\\2008\\2009\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF'";
 export const recordHash=(value:unknown)=>createHash('sha256').update(stableStringify(value)).digest('hex');

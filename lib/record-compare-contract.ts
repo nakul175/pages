@@ -1,5 +1,5 @@
 import { stableStringify } from "./document";
-import { recordValueEmpty } from "./shared-record-types";
+import { recordValueEmpty } from "./record-value";
 
 export const compareStatuses = ["same", "changed", "only-left", "only-right"] as const;
 export type CompareStatus = (typeof compareStatuses)[number];
