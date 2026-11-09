@@ -65,8 +65,11 @@ test('native heading conversion, Undo and Redo persist with fresh block identiti
   await expect(editorB.getByRole('heading',{name:/Shape source/})).toHaveCount(0);await expect(editorB).toContainText('Shape source');
   const undone=await saved();expect(undone.version).toBeGreaterThan(heading.version);expect(undone.document.content[0].type).toBe('paragraph');expect([initialId,heading.document.content[0].attrs.id]).not.toContain(undone.document.content[0].attrs.id);
   response=submit();await editorA.press('ControlOrMeta+Shift+z');expect((await response).status()).toBe(200);
-  await expect(editorB.getByRole('heading',{name:/^Shape source(?: |$)/})).toBeVisible();
+  // A remote caret can precede the restored text and contributes its actor label.
+  // Match the document text while still requiring the restored H1 semantics.
+  await expect(editorB.getByRole('heading',{name:/Shape source/,level:1})).toBeVisible();
   const redone=await saved();expect(redone.version).toBeGreaterThan(undone.version);expect(JSON.stringify(redone.document)).toContain('Shape source');expect(redone.title).toBe(initial.title);
+  expect(redone.document.content[0].type).toBe('heading');
   expect(redone.document.content[0].content).toEqual(initial.document.content[0].content);
   expect([initialId,heading.document.content[0].attrs.id,undone.document.content[0].attrs.id]).not.toContain(redone.document.content[0].attrs.id);
  }finally{await a.close();await b.close();}
