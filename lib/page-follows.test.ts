@@ -46,10 +46,16 @@ const ws = "ws-n45";
 const boltWs = "ws-n45-b";
 let ops = "";
 let boltOps = "";
-const monday = new Date("2026-11-09T03:30:00.000Z");
-const tuesday = new Date("2026-11-10T03:30:00.000Z");
-const early = new Date("2026-11-09T02:30:00.000Z");
-const newYorkMorning = new Date("2026-11-09T14:00:00.000Z");
+// SQL revisions use the real database clock. Schedule after those writes, rather
+// than a fixed calendar date that eventually excludes every new revision.
+const monday = new Date();
+monday.setUTCDate(monday.getUTCDate() + ((8 - monday.getUTCDay()) % 7 || 7));
+monday.setUTCHours(3, 30, 0, 0);
+const later = (days: number) => new Date(monday.getTime() + days * 86_400_000);
+const tuesday = later(1);
+const early = new Date(monday.getTime() - 3_600_000);
+const newYorkMorning = new Date(monday.getTime() + 10.5 * 3_600_000);
+const mondayDate = monday.toISOString().slice(0, 10);
 
 beforeAll(async () => {
   db = await createDatabase(":memory:");
@@ -119,11 +125,11 @@ async function mail(userId: string, kind?: string) {
 
 it("knows when 09:00 has arrived in the follower timezone", () => {
   expect(digestWindow(early, "Asia/Kolkata", "daily")).toBeNull();
-  expect(digestWindow(monday, "Asia/Kolkata", "daily")).toBe("2026-11-09");
+  expect(digestWindow(monday, "Asia/Kolkata", "daily")).toBe(mondayDate);
   expect(digestWindow(tuesday, "Asia/Kolkata", "weekly")).toBeNull();
-  expect(digestWindow(monday, "Asia/Kolkata", "weekly")).toBe("2026-11-09");
+  expect(digestWindow(monday, "Asia/Kolkata", "weekly")).toBe(mondayDate);
   expect(digestWindow(monday, "America/New_York", "daily")).toBeNull();
-  expect(digestWindow(newYorkMorning, "America/New_York", "daily")).toBe("2026-11-09");
+  expect(digestWindow(newYorkMorning, "America/New_York", "daily")).toBe(mondayDate);
 });
 
 it("follows a page or its children and lists that follow in settings", async () => {
@@ -237,7 +243,7 @@ it("omits a page and drops the follow when access is gone at send", async () => 
   await follow(viewer, page.id);
   await save(editor, page.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Visible", "Changed"));
   await revoke(page.id, viewer.id);
-  await runPageFollowDigests(r, new Date("2026-12-07T03:30:00.000Z"));
+  await runPageFollowDigests(r, later(28));
   const bodies = (await mail(viewer.id)).map(row => row.body).join("\n");
   expect(bodies).not.toContain(title);
   expect((await db.query("SELECT page_id FROM hs_page_follows WHERE user_id=$1 AND page_id=$2", [viewer.id, page.id])).rows).toEqual([]);
@@ -251,7 +257,7 @@ it("drops a built digest item when access is revoked before send", async () => {
   await follow(viewer, page.id);
   await save(editor, page.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Midair", "Changed"));
   const seen: string[][] = [];
-  await runPageFollowDigests(r, new Date("2026-11-16T03:30:00.000Z"), {
+  await runPageFollowDigests(r, later(7), {
     afterBuild: async draft => {
       if (draft.userId !== viewer.id) return;
       seen.push(draft.pageIds);
@@ -270,7 +276,7 @@ it("says a followed page was removed without its title for someone who cannot re
   await follow(viewer, page.id);
   await save(editor, page.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Gone", "Changed"));
   await trash(page.id);
-  await runPageFollowDigests(r, new Date("2026-11-23T03:30:00.000Z"));
+  await runPageFollowDigests(r, later(14));
   const viewerMail = (await mail(viewer.id, "digest")).map(row => row.body).join("\n");
   const ownerMail = (await mail(owner.id, "digest")).map(row => row.body).join("\n");
   expect(viewerMail).toContain(REMOVED_FOLLOW);
@@ -293,7 +299,7 @@ it("includes a changed child when the follow covers the tree", async () => {
   await follow(viewer, only.id, false);
   await save(editor, child.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Child", "Updated"));
   await save(editor, nested.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Nested", "Updated"));
-  await runPageFollowDigests(r, new Date("2026-11-30T03:30:00.000Z"));
+  await runPageFollowDigests(r, later(21));
   const body = (await mail(viewer.id, "digest")).map(row => row.body).join("\n");
   expect(body).toContain("CHILD_PAGE_TITLE");
   expect(body).not.toContain("NESTED_SECRET_TITLE");
