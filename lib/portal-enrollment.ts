@@ -28,7 +28,7 @@ async function preview(tx:Sql,s:PortalScope,actor:string,target:string){
   if((await tx.query(`SELECT g.user_id FROM ${table} g JOIN hs_data_workspaces w ON w.tenant_id=g.tenant_id WHERE w.workspace_id=$1 AND g.user_id=$2 LIMIT 1`,[s.workspace,target])).rows.length)throw deny();
  }
  if((await tx.query('SELECT id FROM hs_pages WHERE workspace_id=$1 AND owner_id=$2 LIMIT 1',[s.workspace,target])).rows.length)throw deny();
- if((await tx.query('SELECT g.subject FROM hs_grants g JOIN hs_pages p ON p.id=g.page_id JOIN hs_spaces s ON s.id=p.space_id WHERE s.workspace_id=$1 AND g.subject=$2 LIMIT 1',[s.workspace,target])).rows.length||
+ if((await tx.query('SELECT g.subject FROM hs_grants g JOIN hs_pages p ON p.id=g.page_id WHERE p.workspace_id=$1 AND g.subject=$2 LIMIT 1',[s.workspace,target])).rows.length||
     (await tx.query('SELECT m.user_id FROM hs_space_members m JOIN hs_spaces s ON s.id=m.space_id WHERE s.workspace_id=$1 AND m.user_id=$2 LIMIT 1',[s.workspace,target])).rows.length||
     (await tx.query('SELECT id FROM hs_access_invitations WHERE workspace_id=$1 AND invitee_subject=$2 LIMIT 1',[s.workspace,target])).rows.length)throw deny();
  const origins=(await tx.query<{request_id:string;issuer:string;workspace_id:string}>('SELECT request_id,issuer,workspace_id FROM hs_portal_provision_receipts WHERE target_id=$1 ORDER BY request_id',[target])).rows;
