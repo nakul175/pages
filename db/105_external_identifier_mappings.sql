@@ -1,8 +1,18 @@
 -- HOLY-70 external system identifier mappings.
 -- A mapping is identity metadata for one tenant, integration namespace, and external ID.
 -- It is not a credential, and an integration grant does not grant record access.
-ALTER TABLE hs_data_collection_grants DROP CONSTRAINT IF EXISTS hs_data_collection_grants_capabilities_check;
+-- Startup replays this schema. Keep a later capability constraint intact.
+DO $capability_constraint$
+BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM pg_constraint
+  WHERE conrelid = 'hs_data_collection_grants'::regclass AND conname = 'hs_data_collection_grants_capabilities_check'
+    AND position(quote_literal('manage-external-ids') IN pg_get_constraintdef(oid)) > 0
+ ) THEN
+ ALTER TABLE hs_data_collection_grants DROP CONSTRAINT IF EXISTS hs_data_collection_grants_capabilities_check;
 ALTER TABLE hs_data_collection_grants ADD CONSTRAINT hs_data_collection_grants_capabilities_check CHECK(capabilities <@ ARRAY['view','create','edit','link','import','export','bulk','archive','delete','restore','merge','schema','manage-views','history','restore-values','manage-templates','manage-permissions','manage-forms','manage-reviews','review','manage-import-profiles','manage-external-ids']::text[]);
+ END IF;
+END $capability_constraint$;
 
 CREATE TABLE IF NOT EXISTS hs_external_integrations (
  tenant_id uuid NOT NULL REFERENCES hs_data_tenants(id),
