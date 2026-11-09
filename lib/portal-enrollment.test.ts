@@ -53,7 +53,7 @@ it('dormant page grants and ownership cannot silently activate',async()=>{
  const f=await fixture(),repo=new Repository(db),space=await repo.createSpace({id:f.owner},'Scope fixture',f.workspace),page=await repo.create({id:f.owner},'Preserved page',space.id);
  await db.query("INSERT INTO hs_grants(page_id,subject,role) VALUES($1,$2,'editor')",[page.id,f.target]);
  await expect(portalEnrollment(db,f.scope,{...f.input,operation:'enrollment_preview'})).rejects.toMatchObject({status:403});
- await db.query('UPDATE hs_pages SET space_id=NULL WHERE id=$1',[page.id]);
+ await expect(db.query('UPDATE hs_pages SET space_id=NULL WHERE id=$1',[page.id])).rejects.toMatchObject({code:'23502'});
  await expect(portalEnrollment(db,f.scope,{...f.input,operation:'enrollment_preview'})).rejects.toMatchObject({status:403});
  await db.query('DELETE FROM hs_grants WHERE page_id=$1 AND subject=$2',[page.id,f.target]);await db.query('UPDATE hs_pages SET owner_id=$1 WHERE id=$2',[f.target,page.id]);
  await expect(portalEnrollment(db,f.scope,{...f.input,operation:'enrollment_preview'})).rejects.toMatchObject({status:403});
