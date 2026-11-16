@@ -5,7 +5,7 @@ import "./workspace-sections.css";
 import SessionBoundary from '../components/session-boundary';
 
 export const metadata: Metadata = {
-  title: "Pages by Aplyd",
+  title: "Pages by aplyd",
   description: "Pages that stay close to the work",
 };
 

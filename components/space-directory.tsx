@@ -158,7 +158,7 @@ export default function SpaceDirectory({ workspaceId, includeArchivedInitially =
 
   return <WorkspaceSection workspaceId={workspaceId} section="Spaces" spaces={view?.spaces.filter(space => space.action === "open" && !space.archived)}><main className="space-directory">
     <a className="skip-link" href="#space-directory">Skip to spaces</a>
-    <p><a href="/">Pages by Aplyd</a> / <span>Spaces</span></p>
+    <p><a href="/">Pages by aplyd</a> / <span>Spaces</span></p>
     <div className="space-directory-heading"><h1 id="space-directory">Spaces</h1><button type="button" onClick={() => setCreatingSpace(true)}>+ New space</button></div>
     {creatingSpace && <form className="space-create-form" onSubmit={event => void createSpace(event)}><label>Space name<input autoFocus maxLength={80} value={newSpaceName} onChange={event => setNewSpaceName(event.target.value)} required/></label><div><button type="button" onClick={() => {setCreatingSpace(false);setNewSpaceName("");}}>Cancel</button><button type="submit" disabled={busy || !newSpaceName.trim()}>Create space</button></div></form>}
     <button type="button" onClick={()=>void loadArchived()}>Archived pages</button>
