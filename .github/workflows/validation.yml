@@ -65,6 +65,8 @@ jobs:
           python scripts/check-export-layout.py
           pdftoppm -scale-to 1000 -png output/pdf/export-layout-acceptance.pdf output/pdf/export-layout-page
       - run: npm run typecheck
+      - name: Build the default-disabled Portal permission connector
+        run: node scripts/build-portal-permissions.mjs
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: '1'

@@ -52,6 +52,7 @@ const digestYear = new Date().getUTCFullYear() + 1;
 const novemberFirst = new Date(Date.UTC(digestYear, 10, 1));
 const secondMonday = 8 + (8 - novemberFirst.getUTCDay()) % 7;
 const monday = new Date(Date.UTC(digestYear, 10, secondMonday, 3, 30));
+const later = (days: number) => new Date(monday.getTime() + days * 86_400_000);
 const tuesday = new Date(monday.getTime() + 24 * 60 * 60 * 1000);
 const early = new Date(monday.getTime() - 60 * 60 * 1000);
 const newYorkMorning = new Date(monday.getTime() + 10.5 * 60 * 60 * 1000);
@@ -243,7 +244,7 @@ it("omits a page and drops the follow when access is gone at send", async () => 
   await follow(viewer, page.id);
   await save(editor, page.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Visible", "Changed"));
   await revoke(page.id, viewer.id);
-  await runPageFollowDigests(r, new Date("2026-12-07T03:30:00.000Z"));
+  await runPageFollowDigests(r, later(28));
   const bodies = (await mail(viewer.id)).map(row => row.body).join("\n");
   expect(bodies).not.toContain(title);
   expect((await db.query("SELECT page_id FROM hs_page_follows WHERE user_id=$1 AND page_id=$2", [viewer.id, page.id])).rows).toEqual([]);
@@ -257,7 +258,7 @@ it("drops a built digest item when access is revoked before send", async () => {
   await follow(viewer, page.id);
   await save(editor, page.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Midair", "Changed"));
   const seen: string[][] = [];
-  await runPageFollowDigests(r, new Date("2026-11-16T03:30:00.000Z"), {
+  await runPageFollowDigests(r, later(7), {
     afterBuild: async draft => {
       if (draft.userId !== viewer.id) return;
       seen.push(draft.pageIds);
@@ -276,7 +277,7 @@ it("says a followed page was removed without its title for someone who cannot re
   await follow(viewer, page.id);
   await save(editor, page.id, document({ heading: crypto.randomUUID(), paragraph: crypto.randomUUID() }, "Gone", "Changed"));
   await trash(page.id);
-  await runPageFollowDigests(r, new Date("2026-11-23T03:30:00.000Z"));
+  await runPageFollowDigests(r, later(14));
   const viewerMail = (await mail(viewer.id, "digest")).map(row => row.body).join("\n");
   const ownerMail = (await mail(owner.id, "digest")).map(row => row.body).join("\n");
   expect(viewerMail).toContain(REMOVED_FOLLOW);

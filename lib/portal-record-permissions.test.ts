@@ -1,0 +1,80 @@
+import {beforeAll,afterAll,it,expect} from 'vitest';
+import {createDatabase,type Database} from './database';
+import {Repository} from './repository';
+import {localActor} from './auth';
+import {portalRecordPermission} from './portal-record-permissions';
+import {SharedRecordRepository,type CurrentSuiteTenantAuthority,type RecordContext} from './shared-records';
+import {recordCapabilities} from './shared-record-types';
+let db:Database,records:SharedRecordRepository,record:string;
+const target='record-new-target',tenant=crypto.randomUUID(),workspace='ws-aplyd';
+const config={enabled:true,issuer:'https://accounts.synthetic.invalid',workspace,tenant};
+const ctx=(id=localActor.id):RecordContext=>({actor:{id},tenantId:tenant,workspaceId:workspace});
+let active=true,admin=true,revision='a'.repeat(64);
+const authority:CurrentSuiteTenantAuthority={verify:async c=>({active,tenantAdministrator:admin&&c.actor.id===localActor.id,revision,subject:c.actor.id,tenantId:c.tenantId,workspaceId:c.workspaceId})};
+const request={actor_subject:localActor.id,target_subject:target,actor_uid:'synthetic-uid',collection:'contacts',record_id:null as string|null};
+const preview=async()=>portalRecordPermission(db,config,{...request,operation:'record_preview'},authority) as Promise<any>;
+const apply=async(change:unknown,expected?:unknown,request_id=crypto.randomUUID())=>portalRecordPermission(db,config,{...request,operation:'record_apply',change,expected:expected??await preview(),request_id},authority) as Promise<any>;
+beforeAll(async()=>{
+ db=await createDatabase(':memory:');const pages=new Repository(db);await pages.seedLocal();await db.query("UPDATE hs_members SET role='owner' WHERE workspace_id=$1 AND user_id=$2",[workspace,localActor.id]);
+ await db.query('INSERT INTO hs_users(id,name) VALUES($1,$1)',[target]);await db.query('INSERT INTO hs_members(workspace_id,user_id) VALUES($1,$2)',[workspace,target]);
+ await db.query("INSERT INTO hs_portal_reviewers(workspace_id,issuer,subject,enabled,review_reference) VALUES($1,$2,$3,true,'synthetic')",[workspace,config.issuer,localActor.id]);
+ await db.query("INSERT INTO hs_data_tenants(id,name) VALUES($1,'Synthetic')",[tenant]);
+ await db.query("INSERT INTO hs_data_workspaces(workspace_id,tenant_id,review_reference) VALUES($1,$2,'synthetic')",[workspace,tenant]);
+ await db.query("INSERT INTO hs_data_collections(tenant_id,id,name,core) VALUES($1,'contacts','Contacts',true)",[tenant]);
+ await db.query("INSERT INTO hs_data_collection_grants(tenant_id,user_id,collection,capabilities) VALUES($1,$2,'contacts',$3)",[tenant,localActor.id,[...recordCapabilities]]);
+ await db.query("INSERT INTO hs_data_field_permissions(tenant_id,collection,field_key,user_id,can_view,can_write,can_history) VALUES($1,'contacts','core:email',$2,true,true,true)",[tenant,localActor.id]);
+ records=new SharedRecordRepository(pages,authority);
+ record=(await records.create(ctx(),{operationId:crypto.randomUUID(),collection:'contacts',name:'Preserved synthetic contact',schemaVersion:1,values:{'core:email':'private@example.invalid'}})).record.id;
+});
+afterAll(async()=>db?.close());
+it('requires current tenant administrator separately from native workspace reviewer',async()=>{
+ admin=false;await expect(preview()).rejects.toMatchObject({status:403});admin=true;
+ active=false;await expect(preview()).rejects.toMatchObject({status:403});active=true;
+ expect((await preview()).target.collection.capabilities).toEqual([]);
+ await db.query('UPDATE hs_portal_reviewers SET enabled=false WHERE subject=$1',[localActor.id]);
+ await expect(preview()).rejects.toMatchObject({status:403});await db.query('UPDATE hs_portal_reviewers SET enabled=true WHERE subject=$1',[localActor.id]);
+});
+it('uses exact native collection and field capabilities without exposing sensitive values in plans',async()=>{
+ const p=await preview();expect(JSON.stringify(p)).not.toContain('private@example.invalid');
+ await apply({collectionGrant:{expectedVersion:0,capabilities:['view','edit','history']},fields:[{key:'core:email',expectedVersion:0,canView:true,canWrite:false,canHistory:false}]},p);
+ expect((await records.get(ctx(target),record)).values['core:email']).toBe('private@example.invalid');
+ expect(JSON.stringify(await records.history(ctx(target),record))).not.toContain('private@example.invalid');
+ await expect(records.update(ctx(target),record,{operationId:crypto.randomUUID(),expectedVersion:1,schemaVersion:1,values:{'core:email':'forbidden@example.invalid'}})).rejects.toMatchObject({status:403});
+ await apply({collectionGrant:{expectedVersion:1,capabilities:['view','history']},fields:[{key:'core:email',expectedVersion:1,canView:false,canWrite:false,canHistory:false}]});
+ expect(JSON.stringify(await records.get(ctx(target),record))).not.toContain('private@example.invalid');
+ await expect(records.update(ctx(target),record,{operationId:crypto.randomUUID(),expectedVersion:1,schemaVersion:1,name:'Denied'})).rejects.toMatchObject({status:403});
+ await apply({collectionGrant:{expectedVersion:2,capabilities:[]}});await expect(records.get(ctx(target),record)).rejects.toMatchObject({status:404});
+ expect((await records.get(ctx(),record)).values['core:email']).toBe('private@example.invalid');
+});
+it('changes a single record without granting the collection',async()=>{
+ request.record_id=record;const p=await preview();
+ await apply({recordGrant:{recordId:record,expectedVersion:0,capabilities:['view','edit']}},p);
+ expect((await records.get(ctx(target),record)).capabilities).toContain('edit');
+ expect((await preview()).target.collection.capabilities).toEqual([]);
+ await apply({recordGrant:{recordId:record,expectedVersion:1,capabilities:['view']}});
+ await expect(records.update(ctx(target),record,{operationId:crypto.randomUUID(),expectedVersion:1,schemaVersion:1,name:'Denied'})).rejects.toMatchObject({status:403});
+ await apply({recordGrant:{recordId:record,expectedVersion:2,capabilities:[]}});await expect(records.get(ctx(target),record)).rejects.toMatchObject({status:404});request.record_id=null;
+});
+it('rejects changed authority, stale capability versions, self and replay',async()=>{
+ const p=await preview();revision='b'.repeat(64);await expect(apply({collectionGrant:{expectedVersion:3,capabilities:['view']}},p)).rejects.toMatchObject({code:'access_conflict'});
+ await expect(apply({collectionGrant:{expectedVersion:0,capabilities:['view']}})).rejects.toThrow();
+ await expect(portalRecordPermission(db,config,{...request,operation:'record_preview',target_subject:localActor.id},authority)).rejects.toMatchObject({status:403});
+ const id=crypto.randomUUID();await apply({collectionGrant:{expectedVersion:3,capabilities:[]}},undefined,id);
+ await expect(apply({collectionGrant:{expectedVersion:4,capabilities:[]}},undefined,id)).rejects.toMatchObject({code:'operation_mismatch'});
+});
+it('rolls back the native permission and audit when durable receipt fails',async()=>{
+ const before=await preview();await db.query("CREATE FUNCTION reject_record_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic failure'; END $$");
+ await db.query('CREATE TRIGGER fail_record_receipt BEFORE INSERT ON hs_portal_permission_receipts FOR EACH ROW EXECUTE FUNCTION reject_record_receipt()');
+ await expect(apply({collectionGrant:{expectedVersion:4,capabilities:['view']}})).rejects.toThrow();expect(await preview()).toEqual(before);
+ await db.query('DROP TRIGGER fail_record_receipt ON hs_portal_permission_receipts');
+});
+it('refresh fingerprint changes for current-subject grants, excludes content values and ignores another subject',async()=>{
+ const {SharedRecordSessionRepository}=await import('./shared-record-session');const session=new SharedRecordSessionRepository(new Repository(db),authority);
+ const before=await session.fingerprint(ctx(target));expect(JSON.stringify(before)).not.toContain('private@example.invalid');
+ await db.query("UPDATE hs_data_records SET name='Renamed preserved record' WHERE id=$1",[record]);expect(await session.fingerprint(ctx(target))).toEqual(before);
+ await db.query("UPDATE hs_data_field_permissions SET can_view=true,version=version+1 WHERE user_id=$1 AND tenant_id=$2",[target,tenant]);
+ expect(await session.fingerprint(ctx(target))).not.toEqual(before);
+ const current=await session.fingerprint(ctx(target));await db.query("UPDATE hs_data_collection_grants SET version=version+1 WHERE user_id=$1 AND tenant_id=$2",[localActor.id,tenant]);
+ expect(await session.fingerprint(ctx(target))).toEqual(current);
+ active=false;await expect(session.fingerprint(ctx(target))).rejects.toThrow();active=true;
+});

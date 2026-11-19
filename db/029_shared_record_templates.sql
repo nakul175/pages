@@ -1,6 +1,16 @@
 -- Explicit capability only; no existing user's grants are expanded.
-ALTER TABLE hs_data_collection_grants DROP CONSTRAINT IF EXISTS hs_data_collection_grants_capabilities_check;
+-- Startup replays this schema. Keep a later capability constraint intact.
+DO $capability_constraint$
+BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM pg_constraint
+  WHERE conrelid = 'hs_data_collection_grants'::regclass AND conname = 'hs_data_collection_grants_capabilities_check'
+    AND position(quote_literal('manage-templates') IN pg_get_constraintdef(oid)) > 0
+ ) THEN
+ ALTER TABLE hs_data_collection_grants DROP CONSTRAINT IF EXISTS hs_data_collection_grants_capabilities_check;
 ALTER TABLE hs_data_collection_grants ADD CONSTRAINT hs_data_collection_grants_capabilities_check CHECK(capabilities <@ ARRAY['view','create','edit','link','import','export','bulk','archive','delete','restore','merge','schema','manage-views','history','restore-values','manage-templates']::text[]);
+ END IF;
+END $capability_constraint$;
 CREATE TABLE IF NOT EXISTS hs_data_template_catalogues(tenant_id uuid NOT NULL,collection text NOT NULL,revision integer NOT NULL DEFAULT 1,PRIMARY KEY(tenant_id,collection),FOREIGN KEY(tenant_id,collection) REFERENCES hs_data_collections(tenant_id,id));
 CREATE TABLE IF NOT EXISTS hs_data_record_templates(id uuid PRIMARY KEY,tenant_id uuid NOT NULL,collection text NOT NULL,name text NOT NULL,name_search text GENERATED ALWAYS AS(lower(name)) STORED,version integer NOT NULL DEFAULT 1,deprecated boolean NOT NULL DEFAULT false,defaults jsonb NOT NULL,created_by text NOT NULL REFERENCES hs_users(id),created_at timestamptz NOT NULL DEFAULT clock_timestamp(),UNIQUE(tenant_id,id),UNIQUE(tenant_id,collection,name_search),FOREIGN KEY(tenant_id,collection) REFERENCES hs_data_collections(tenant_id,id));
 CREATE TABLE IF NOT EXISTS hs_data_record_template_versions(tenant_id uuid NOT NULL,template_id uuid NOT NULL,version integer NOT NULL,name text NOT NULL,deprecated boolean NOT NULL,defaults jsonb NOT NULL,schema_version integer NOT NULL,actor_id text NOT NULL REFERENCES hs_users(id),created_at timestamptz NOT NULL DEFAULT clock_timestamp(),PRIMARY KEY(tenant_id,template_id,version),FOREIGN KEY(tenant_id,template_id) REFERENCES hs_data_record_templates(tenant_id,id));

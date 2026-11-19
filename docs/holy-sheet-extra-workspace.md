@@ -1,0 +1,13 @@
+# Existing-person additional-workspace enrollment
+
+Staging only. Adds an existing exact Holy Sheet identity as Observer in the operator-pinned reviewed workspace. Does not create or rename a user, create an Accounts link, infer identity from email, alter existing memberships, grant central administration or reactivate a disabled membership.
+
+Default off: Portal APLYD_HS_ENROLLMENT_ENABLED and native HS_PORTAL_ENROLLMENT_ENABLED. Existing native writer/provisioning configuration and exact reviewed mapping remain required. Reviewer must be an active central super-admin plus reviewed native Owner/Administrator. Target needs active central organisation/app access, one exact enabled Accounts link to the same subject, an existing native user with another active workspace membership, and matching original creation provenance when applicable.
+
+Signed five-minute review pins the exact subjects, original memberships, native version/revision and reviewer. Native transaction serializes target enrollment, inserts only an Observer membership, increments access revision/version and atomically stores its receipt. Portal independently confirms the native readback and current Accounts session before marking applied. Uncertain dispatch blocks retry pending reconciliation.
+
+Protected conflicts: existing selected membership (including disabled), existing native invitation, dormant page/space grants or page ownership, tenant record grants/field permissions, and active central tenant-administrator authority. These are not overwritten or silently activated; separate effective-access review remains necessary. The connector remains pinned to one reviewed workspace per configured instance; this does not implement a cross-database workspace picker.
+
+Browser acceptance: existing exact person signs in via real Accounts OIDC to their original workspace; selected additional workspace initially denies. Portal Review is read-only. Portal Save adds Observer and the existing cookie opens the selected workspace. Portal Administrator grant opens editing; Observer downgrade closes the open editor and denies write; revoke clears content and denies the selected workspace while the same session still accesses the original workspace. All existing user/history rows, original memberships and 445 native/32 Portal tables are compared.
+
+Tests: eight native cases (including actual PostgreSQL concurrency, atomic receipt rollback, stale review, invitation/dormant permission conflicts); six Portal focused cases; typecheck. Full regression and exact draft PR CI are recorded in the local acceptance pack. No production activation or deployment.

@@ -1,8 +1,18 @@
 -- HOLY-73 effective-dated field values.
 -- Effective time is stored separately from the transaction time (entered_at).
 -- No schedule runner, live activation, purge, or payroll calculation is enabled.
-ALTER TABLE hs_data_collection_grants DROP CONSTRAINT IF EXISTS hs_data_collection_grants_capabilities_check;
+-- Startup replays this schema. Keep a later capability constraint intact.
+DO $capability_constraint$
+BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM pg_constraint
+  WHERE conrelid = 'hs_data_collection_grants'::regclass AND conname = 'hs_data_collection_grants_capabilities_check'
+    AND position(quote_literal('correct-effective') IN pg_get_constraintdef(oid)) > 0
+ ) THEN
+ ALTER TABLE hs_data_collection_grants DROP CONSTRAINT IF EXISTS hs_data_collection_grants_capabilities_check;
 ALTER TABLE hs_data_collection_grants ADD CONSTRAINT hs_data_collection_grants_capabilities_check CHECK(capabilities <@ ARRAY['view','create','edit','link','import','export','bulk','archive','delete','restore','merge','schema','manage-views','history','restore-values','manage-templates','manage-permissions','manage-forms','manage-reviews','review','manage-import-profiles','manage-external-ids','manage-integration-health','manage-effective-dates','correct-effective']::text[]);
+ END IF;
+END $capability_constraint$;
 
 CREATE TABLE IF NOT EXISTS hs_effective_field_policies (
  tenant_id uuid NOT NULL REFERENCES hs_data_tenants(id),
